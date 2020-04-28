@@ -1,4 +1,4 @@
-DROP TABLE if EXISTS Przedmioty;
+DROP TABLE if EXISTS Przedmioty CASCADE;
 DROP TABLE if EXISTS Lekcje;
 DROP TABLE if EXISTS Sale CASCADE;
 DROP TABLE if EXISTS Uczniowie;
@@ -26,7 +26,7 @@ CREATE TABLE Place(
 );
 
 CREATE TABLE Pracownicy(
-    id NUMERIC(2) NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY DEFAULT(nextval('Pracownicy_id_seq')) CHECK(id>=0),
+    id NUMERIC(2) NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY CHECK(id>=0),
     imie CHARACTER VARYING NOT NULL,
     nazwisko CHARACTER VARYING NOT NULL,
     godzinyPracy NUMERIC(2),
@@ -38,7 +38,7 @@ CREATE TABLE Pracownicy(
 );
 
 CREATE TABLE Klasy(
-    klasa CHARACTER(2) NOT NULL,
+    klasa VARCHAR(2) NOT NULL,
     PRIMARY KEY (klasa),
     wychowawca NUMERIC(2) NOT NULL REFERENCES Pracownicy(id)
 );
@@ -62,20 +62,20 @@ CREATE TABLE Sale(
     liczba_miejsc NUMERIC NOT NULL CHECK (liczba_miejsc>20)
 );
 
-CREATE TABLE Lekcje(
-    nauczyciel NUMERIC(2) NOT NULL REFERENCES Pracownicy(id),
-    sala NUMERIC(2) NOT NULL REFERENCES Sale(nr),
-    klasa CHARACTER(2) NOT NULL REFERENCES Klasy(klasa),
-    czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
-    dzien CHARACTER VARYING NOT NULL,
-    CHECK(dzien='Poniedzialek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
-    PRIMARY KEY(sala,czas,dzien)
+CREATE TABLE Przedmioty(
+    id NUMERIC(2) PRIMARY KEY,
+    nazwa CHARACTER VARYING NOT NULL,
+    nauczyciel NUMERIC(2) NOT NULL REFERENCES Pracownicy(id)
 );
 
-CREATE TABLE Przedmioty(
-    nazwa CHARACTER VARYING NOT NULL,
-    nauczyciel NUMERIC(2) NOT NULL REFERENCES Pracownicy(id),
-    PRIMARY KEY(nazwa,nauczyciel)
+CREATE TABLE Lekcje(
+    przedmiot NUMERIC(2) NOT NULL REFERENCES Przedmioty(id),
+    sala NUMERIC(2) NOT NULL REFERENCES Sale(nr),
+    klasa VARCHAR(2) NOT NULL REFERENCES Klasy(klasa),
+    czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
+    dzien CHARACTER VARYING NOT NULL,
+    CHECK(dzien='Poniedziałek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
+    PRIMARY KEY(sala,czas,dzien)
 );
 
 CREATE TABLE Obiekty(
@@ -150,6 +150,64 @@ LANGUAGE plpgsql;
 
 CREATE TRIGGER dodaj_place BEFORE INSERT ON Place FOR EACH ROW EXECUTE PROCEDURE dodaj_place();
 
+---------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION dodaj_pracownika()
+RETURNS TRIGGER AS
+    $$
+    DECLARE a RECORD;
+        b NUMERIC(2);
+    BEGIN
+        IF (NEW.id IS NOT NULL) THEN RETURN NEW; END IF;
+        b=-1::numeric(2);
+        FOR a IN SELECT * FROM Pracownicy LOOP
+            IF (a.id>b) THEN b=a.id; END IF;
+            end loop;
+        RETURN ((b+1)::numeric(2), NEW.imie, NEW.nazwisko, NEW.godzinyPracy, NEW.stanowisko, NEW.tytul);
+    end;
+    $$
+LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS dodaj_place ON pracownicy;
+CREATE TRIGGER dodaj_place BEFORE INSERT ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE dodaj_pracownika();
+
+---------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION usun_nauczyciela()
+RETURNS TRIGGER AS
+    $$
+    DECLARE a RECORD;
+    BEGIN
+    IF(SELECT COUNT(*) FROM Klasy WHERE wychowawca=OLD.id)>0 THEN RAISE EXCEPTION 'Znajdz zastepstwo na wychowawstwo';END IF;
+    FOR a IN SELECT * FROM Przedmioty WHERE id=OLD.id LOOP
+        DELETE FROM Lekcje WHERE przedmiot=a.id;
+        END LOOP;
+    DELETE FROM przedmioty WHERE nauczyciel=OLD.id;
+    RETURN OLD;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS usunNauczyciela ON Pracownicy;
+CREATE TRIGGER usunNauczyciela BEFORE DELETE ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE usun_nauczyciela();
+
+---------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION czy_nauczyciel()
+RETURNS TRIGGER AS
+    $$
+    BEGIN
+
+   IF (SELECT stanowisko FROM Pracownicy WHERE id=NEW.nauczyciel)<>'NAUCZYCIEL' THEN
+        RAISE EXCEPTION 'Ta osoba nie ma odpowiednich kwalifikacji';END IF;
+
+    RETURN NEW;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS uczyNauczyciel ON Pracownicy;
+CREATE TRIGGER uczyNauczyciel BEFORE INSERT ON Przedmioty FOR EACH ROW EXECUTE PROCEDURE czy_nauczyciel();
+
 --VIEWS
 
 CREATE OR REPLACE VIEW Pracownicy_wyplaty AS
@@ -173,3 +231,75 @@ $$
 language plpgsql;
 
 --INSERTS
+
+INSERT INTO Place (stanowisko, tytul, placa) VALUES ('NAUCZYCIEL', 'MAGISTER', 18);
+INSERT INTO Place (stanowisko, tytul, placa) VALUES ('NAUCZYCIEL', 'DOKTOR', 25);
+INSERT INTO Place (stanowisko, tytul, placa) VALUES ('NAUCZYCIEL', 'PROFESOR', 30);
+INSERT INTO Place (stanowisko, tytul, placa) VALUES ('OSOBA SPRZĄTAJĄCA', 'BRAK', 12);
+INSERT INTO Place (stanowisko, tytul, placa) VALUES ('OPIEKA MEDYCZNA', 'BRAK', 12);
+
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('A', 'B', 40, 'NAUCZYCIEL', 'MAGISTER');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('C', 'D', 40, 'NAUCZYCIEL', 'MAGISTER');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('E', 'F', 30, 'NAUCZYCIEL', 'DOKTOR');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('G', 'H', 40, 'OSOBA SPRZĄTAJĄCA', 'BRAK');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('A', 'B', 12, 'OPIEKA MEDYCZNA', 'BRAK');
+
+INSERT INTO Klasy (klasa, wychowawca) VALUES ('1E', 0);
+INSERT INTO Klasy (klasa, wychowawca) VALUES ('4E', 1);
+
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (401, '4E', 'A', 'A');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (402, '4E', 'B', 'B');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (403, '4E', 'C', 'C');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (404, '4E', 'D', 'D');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (405, '4E', 'E', 'E');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (406, '4E', 'F', 'F');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (101, '1E', 'G', 'G');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (102, '1E', 'H', 'H');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (103, '1E', 'H', 'H');
+
+INSERT INTO Drogi_ewakuacyjne (id, nr_klatki, nr_wyjscia, miejsce_zbiorki) VALUES (0, 0, 0, 'Plac Sikorskiego');
+INSERT INTO Drogi_ewakuacyjne (id, nr_wyjscia, miejsce_zbiorki) VALUES (1, 0, 'Plac Sikorskiego');
+
+INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (1, 0, 35);
+INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (2, 0, 37);
+INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (3, 0, 25);
+INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (4, 0, 28);
+INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (12, 1, 25);
+INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (11, 1, 45);
+
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (0, 'krzeslo', 25);
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (1, 'lawka', 100);
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (2, 'laptop', 1200);
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (3, 'projektor', 300);
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (4, 'tablica', 150);
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (5, 'mapa', 50);
+INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (6, 'biurko', 100);
+
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (0, 1, 36);
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (1, 1, 18);
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (6, 1, 1);
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (2, 1, 1);
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (3, 1, 1);
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (0, 2, 50);
+INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (1, 2, 15);
+
+INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (0, 'Matematyka', 0);
+INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (1, 'Matematyka', 1);
+INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (2, 'Chemia', 2);
+INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (3, 'Biologia', 2);
+
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 1, '4E', '12:00', 'Poniedziałek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 2, '1E', '12:00', 'Poniedziałek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, '4E', '12:00', 'Środa');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '11:00', 'Piątek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '1E', '8:00', 'Czwartek');
+
+SELECT * FROM Place;
+SELECT * FROM Pracownicy;
+SELECT * FROM Pracownicy_wyplaty;
+SELECT * FROM Klasy;
+SELECT * FROM Uczniowie;
+SELECT * FROM Lekcje;
+--DELETE FROM Pracownicy WHERE id=2;
+
+
