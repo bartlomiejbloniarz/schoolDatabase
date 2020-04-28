@@ -1,10 +1,8 @@
 DROP TABLE if EXISTS Przedmioty;
 DROP TABLE if EXISTS Lekcje;
 DROP TABLE if EXISTS Sale CASCADE;
-DROP TABLE if EXISTS Uczeniowie;
 DROP TABLE if EXISTS Uczniowie;
 DROP TABLE if EXISTS Klasy CASCADE;
-DROP TABLE if EXISTS Nauczyciele;
 DROP TABLE if EXISTS Pracownicy CASCADE;
 DROP TABLE if EXISTS Place;
 DROP TABLE if EXISTS Obiekty CASCADE;
@@ -70,7 +68,8 @@ CREATE TABLE Lekcje(
     klasa CHARACTER(2) NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
     dzien CHARACTER VARYING NOT NULL,
-    CHECK(dzien='Poniedzialek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek')
+    CHECK(dzien='Poniedzialek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
+    PRIMARY KEY(sala,czas,dzien)
 );
 
 CREATE TABLE Przedmioty(
@@ -94,7 +93,7 @@ CREATE TABLE Inwentaz(
 
 --TRIGGERS
 
-create or replace function addKid()
+create or replace function dodajDziecko()
     returns TRIGGER AS
     $$
     declare
@@ -102,6 +101,7 @@ create or replace function addKid()
         dzieci NUMERIC;
     begin
         dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa)+1;
+        if dzieci>40 then RAISE EXCEPTION 'Za duzo dzieci w klasie';end if;
         for record in SELECT* FROM Lekcje loop
             if(record.klasa=NEW.klasa AND dzieci >(SELECT liczba_miejsc FROM sale WHERE sale.nr=record.sala))
                 THEN RAISE EXCEPTION 'Klasa jest pełna';END IF;
@@ -111,9 +111,11 @@ create or replace function addKid()
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "liczbaDzieci" BEFORE INSERT ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE addKid();
+CREATE TRIGGER "liczbaDzieci" BEFORE INSERT ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodajDziecko();
 
-create or replace function addLesson()
+--------------------------------------------------------------------------------------
+
+create or replace function dodajLekcje()
     returns TRIGGER AS
     $$
     declare
@@ -129,13 +131,17 @@ create or replace function addLesson()
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "jednaLekcjaNaRaz" BEFORE INSERT ON Lekcje FOR EACH ROW EXECUTE PROCEDURE addLesson();
+CREATE TRIGGER "jednaLekcjaNaRaz" BEFORE INSERT ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodajLekcje();
+
+---------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION dodaj_place()
 RETURNS TRIGGER AS
     $$
     BEGIN
-        IF (NEW.stanowisko!='NAUCZYCIEL' AND NEW.tytul!='BRAK') THEN RETURN NULL;
+        IF (NEW.stanowisko!='NAUCZYCIEL' AND NEW.tytul!='BRAK') THEN RAISE EXCEPTION 'Błąd';
+        END IF;
+        IF (NEW.placa<12) THEN RAISE EXCEPTION 'To jest wyzysk';
         END IF;
         RETURN NEW;
     end;
@@ -150,5 +156,20 @@ CREATE OR REPLACE VIEW Pracownicy_wyplaty AS
     SELECT imie, nazwisko, placa
 FROM pracownicy pr LEFT JOIN place pl ON (pr.tytul=pl.tytul AND pr.stanowisko=pl.stanowisko);
 
---INSERTS
+--FUNCTIONS
 
+create or replace function mojPlanLekcji(idDziecka NUMERIC)
+    returns TABLE(nauczyciel NUMERIC(2),sala NUMERIC(2),klasa VARCHAR(2),czas TIME ,dzien VARCHAR) as
+$$
+declare
+    klasaDziecka VARCHAR;
+begin
+    klasaDziecka=(SELECT klasa FROM Uczniowie u WHERE u.index=idDziecka);
+
+    return QUERY SELECT * FROM Lekcje WHERE Lekcje.klasa=klasaDziecka;
+
+end;
+$$
+language plpgsql;
+
+--INSERTS
