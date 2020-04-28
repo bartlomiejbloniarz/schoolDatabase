@@ -100,7 +100,9 @@ create or replace function dodajDziecko()
        record record;
         dzieci NUMERIC;
     begin
-        dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa)+1;
+        dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa);
+        IF TG_OP='UPDATE' AND OLD.klasa<>NEW.klasa THEN dzieci=dzieci+1;END IF;
+        IF TG_OP='INSERT' THEN dzieci=dzieci+1;END IF;
         if dzieci>40 then RAISE EXCEPTION 'Za duzo dzieci w klasie';end if;
         for record in SELECT* FROM Lekcje loop
             if(record.klasa=NEW.klasa AND dzieci >(SELECT liczba_miejsc FROM sale WHERE sale.nr=record.sala))
@@ -111,7 +113,7 @@ create or replace function dodajDziecko()
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "liczbaDzieci" BEFORE INSERT ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodajDziecko();
+CREATE TRIGGER "liczbaDzieci" BEFORE INSERT OR UPDATE ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodajDziecko();
 
 --------------------------------------------------------------------------------------
 
@@ -123,15 +125,16 @@ create or replace function dodajLekcje()
     begin
 
         for record in SELECT* FROM Lekcje loop
-            if(record.klasa=NEW.klasa AND record.czas=NEW.czas AND record.dzien=NEW.dzien)
-                THEN RAISE EXCEPTION 'Klasa ma już wtedy lekcje ';END IF;
+            if(record.klasa=NEW.klasa AND record.czas=NEW.czas AND record.dzien=NEW.dzien)THEN
+                IF TG_OP='UPDATE' AND record IS NOT DISTINCT FROM OLD THEN CONTINUE;END IF;
+                RAISE EXCEPTION 'Klasa ma już wtedy lekcje ';END IF;
          end loop;
         return NEW;
     end;
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "jednaLekcjaNaRaz" BEFORE INSERT ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodajLekcje();
+CREATE TRIGGER "jednaLekcjaNaRaz" BEFORE INSERT OR UPDATE ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodajLekcje();
 
 ---------------------------------------------------------------------------------------
 
@@ -148,7 +151,7 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER dodaj_place BEFORE INSERT ON Place FOR EACH ROW EXECUTE PROCEDURE dodaj_place();
+CREATE TRIGGER dodaj_place BEFORE INSERT OR UPDATE ON Place FOR EACH ROW EXECUTE PROCEDURE dodaj_place();
 
 ---------------------------------------------------------------------------------------
 
@@ -207,6 +210,30 @@ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS uczyNauczyciel ON Pracownicy;
 CREATE TRIGGER uczyNauczyciel BEFORE INSERT ON Przedmioty FOR EACH ROW EXECUTE PROCEDURE czy_nauczyciel();
+
+---------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION zamien_nauczyciela()
+RETURNS TRIGGER AS
+    $$
+    DECLARE record RECORD;
+    BEGIN
+        IF(OLD.stanowisko='NAUCZYCIEL' AND NEW.stanowisko<>'NAUCZYCIEL')THEN RAISE EXCEPTION 'Nie można dokonać zamiany';END IF;
+       UPDATE Klasy SET wychowawca=NEW.id WHERE wychowawca=OLD.id;
+
+       DELETE FROM Lekcje WHERE (SELECT nauczyciel FROM Przedmioty p WHERE p.id=Lekcje.przedmiot)=OLD.id;
+       --nauczyciel=OLD.id;
+       DELETE FROM Przedmioty WHERE nauczyciel=OLD.id;
+
+        RETURN NEW;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+DROP TRIGGER  zamienNauczyciela ON Pracownicy;
+CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE zamien_nauczyciela();
+
+-----------------------------------------------------------------------------------------
 
 --VIEWS
 
