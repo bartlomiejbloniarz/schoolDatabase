@@ -16,7 +16,8 @@ CREATE TABLE Place(
     CHECK (stanowisko='NAUCZYCIEL' OR stanowisko='DYREKTOR' OR stanowisko='SEKRETARZ' OR stanowisko='OSOBA SPRZĄTAJĄCA'
                OR stanowisko='OPIEKA MEDYCZNA' OR stanowisko='SPRZEDAWCA' OR stanowisko='PSYCHOLOG'),
     tytul VARCHAR CHECK(tytul='DOKTOR' OR tytul='MAGISTER' OR tytul='PROFESOR' OR tytul='DOKTOR HABILITOWANY'),
-    PRIMARY KEY (stanowisko,tytul)
+    PRIMARY KEY (stanowisko,tytul),
+    placa NUMERIC(5,2) NOT NULL
 );
 CREATE TABLE Pracownicy(
     id NUMERIC(2) NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY,
