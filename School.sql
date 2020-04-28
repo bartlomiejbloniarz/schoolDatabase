@@ -230,15 +230,15 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-DROP TRIGGER  zamienNauczyciela ON Pracownicy;
+DROP TRIGGER IF EXISTS  zamienNauczyciela ON Pracownicy;
 CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE zamien_nauczyciela();
 
 -----------------------------------------------------------------------------------------
 
 --VIEWS
-
-CREATE OR REPLACE VIEW Pracownicy_wyplaty AS
-    SELECT imie, nazwisko, placa
+DROP VIEW IF EXISTS Tygodniowa_placa;
+CREATE OR REPLACE VIEW Tygodniowa_placa AS
+    SELECT imie, nazwisko, placa*pr.godzinyPracy AS placa
 FROM pracownicy pr LEFT JOIN place pl ON (pr.tytul=pl.tytul AND pr.stanowisko=pl.stanowisko);
 
 --FUNCTIONS
@@ -327,6 +327,7 @@ SELECT * FROM Pracownicy_wyplaty;
 SELECT * FROM Klasy;
 SELECT * FROM Uczniowie;
 SELECT * FROM Lekcje;
+SELECT * FROM Tygodniowa_placa;
 --DELETE FROM Pracownicy WHERE id=2;
 
 
