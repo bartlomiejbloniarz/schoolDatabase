@@ -235,14 +235,41 @@ CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUT
 
 -----------------------------------------------------------------------------------------
 
---VIEWS
-DROP VIEW IF EXISTS Tygodniowa_placa;
-CREATE OR REPLACE VIEW Tygodniowa_placa AS
-    SELECT imie, nazwisko, placa*pr.godzinyPracy AS placa
-FROM pracownicy pr LEFT JOIN place pl ON (pr.tytul=pl.tytul AND pr.stanowisko=pl.stanowisko);
 
 --FUNCTIONS
+create or replace function wiecej_niz_zero(a NUMERIC)
+    returns NUMERIC AS
+$$
+  begin
+      IF a<=0 THEN return NULL; END IF;
+      return a;
+end;
+$$
+language plpgsql;
+------to sa funkcje dzialajace razem
+create or replace function braki_wyposazenia()
+    returns TABLE(sala NUMERIC(2),krzesla NUMERIC,lawki NUMERIC) as
+$$
+declare
+    nrKrzesla NUMERIC;
+    nrLawki NUMERIC;
+begin
+   nrKrzesla=(SELECT id FROM Obiekty o WHERE o.nazwa='krzeslo');
+   nrLawki=(SELECT id FROM Obiekty o WHERE o.nazwa='lawka');
 
+    return QUERY SELECT s.nr AS "sala",
+                        wiecej_niz_zero(liczba_miejsc+1-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
+                                i.obiekt=nrKrzesla),0) ) AS "krzesla",
+                        wiecej_niz_zero(liczba_miejsc-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
+                                i.obiekt=nrLawki),0) ) AS "lawki"
+    FROM Sale s WHERE wiecej_niz_zero(liczba_miejsc+1-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
+                                i.obiekt=nrKrzesla),0) ) IS NOT NULL OR
+                        wiecej_niz_zero(liczba_miejsc-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
+                                i.obiekt=nrLawki),0) ) IS NOT NULL;
+end;
+$$
+language plpgsql;
+---------------------------------------------------------------------------------
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
     returns TABLE(nauczyciel NUMERIC(2),sala NUMERIC(2),klasa VARCHAR(2),czas TIME ,dzien VARCHAR) as
 $$
@@ -256,6 +283,15 @@ begin
 end;
 $$
 language plpgsql;
+
+--VIEWS
+
+CREATE OR REPLACE VIEW Pracownicy_wyplaty AS
+    SELECT imie, nazwisko, placa
+FROM pracownicy pr LEFT JOIN place pl ON (pr.tytul=pl.tytul AND pr.stanowisko=pl.stanowisko);
+
+CREATE OR REPLACE VIEW braki_wyposazenia AS
+    SELECT * FROM braki_wyposazenia();
 
 --INSERTS
 
