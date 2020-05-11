@@ -6,55 +6,49 @@ lekcjach tj. konkretnych zajęciach odbywających się w danych godzinach i dnia
 salach tj. pomieszczeniach (tabela Sale), 
 uczniach uczęszczających do szkoły (tabela Uczniowie), 
 klasach tj. grupach ucznów (np.6a)(tabela Klasy), 
-pracownikach (tabela pracownicy),
-płacach pracowników za godzinę brutto(tabela Place),
-obiektach tj. rzeczach, jakie mogą się znajdować w pomieszczeniach (tabela Obiekty), 
-inwentarzach sal zawierających spisy obiektow (tabela Inwentarz), 
-drogach ewakuacyjnych (tabela Drogi_ewakuacyjne),
+pracownikach tj. nauczycielach (tabela pracownicy),
+Obecnościach uczniów na lekcjach  (tabela Obecności),
+Ocenach uczniów z konkretnych przedmiotów (Tabela Oceny),
+Formach sprawdzania wiedzy np. sprawdzianach, kartkówkach (tabela Terminarz)
 
 
 Zachodzą następujące zależności między tablami: 
 ponież stosowane będą następujące oznaczenia na typy relacji:
 O oznacza obowiązkowe, N oznacza nieobowiązkowe, W oznacza wiele, J odnzacza jeden.
 
-Tabela Sale jest w relacji OW:NJ z Drogi_ewakuacyjne.
-Tabela Inwentarz jest w relacji OW:NJ z Sale na zasadzie: w każdej sali musi być biurko.
-Tabela Inwentarz jest w relacji OW:NJ z Obiekty na zasadzie: wiele obiektow moze byc w inwentarzu.
 Tabela Uczniowie jest w relacji OW:NJ z Klasy na zasadzie: klasa moze posiadać w inwentarzu wiele obiektów.
 Tabela Klasy jest w relacji OW:NJ z Pracownicy na zasadzie bycia wychowawcą. 
 Tabela Przedmioty jest w relacji OW:NJ z Pracownicy na zasadzie prowadzenia przedmiotu, przedmiot musi ktoś prowadzić, jednak nie każdy musi prowadzić przedmiot.
 Tabela Lekcje jest w relacji OW:NJ z Sale na zasadzie każda lekcja musi się odbywać w dokłądnie jednym pomieszczeniu, jednak nie w każdym pomieszczeniu muszą odbywać lekcje. 
 Tabela Lekcje jest w relacji OW:NJ z Przedmioty na zasadzie każda lekcja musi dotyczyć jakiegoś przedmiotu jednak nie z każdego przedmiotu lekcje muszą się odbywać. 
-Tabela Pracownicy jest w relacji OW:NJ z Place na zasadzie każdy pracownik musi mieć przypisaną dokładnie jedną płacę na podstawie stwojego stanowiska oraz stopnia naukowego, jednak nie każde stanowisko i stopień naukowy muszą być objęte przez pracowników.
-Tabela Lekcje jest w relacji OW:NJ z Klasy na zasadzie w każda klasa musi odbywać się z jakąś klasą. 
-Tabela Obiekty jest w relacji OW:NW z Sale za pośrednictwem tabeli Inwentaz.
-Dodatkowo zawarte są:
-perspektywa przedstawiająca pensje pracowników o danym imieniu i nazwisku,
-perpekstywa przedstawiająca braki wyposazenia,
-funkcja przedstawiająca spis zajęć dla podanego ucznia,
+Tabela Lekcje jest w relacji OW:NJ z Klasy na zasadzie w każda klasa musi odbywać się z jakąś klasą.
+Tabela Termiarz jest w relacji OW:NJ z Lekcje na zasadzie każda forma sprawdzania wiedzy musi odbywać się podaczas jakiejś lekcji, jednak mogą odbywać się lekcje na któych wiedza uczniów nie jest sprawdzana.
+Tabela Nieobecności jest w relacji OW:NJ z Uczniowie na zasadzie każda nieobecność dotyczy konkretnego ucznia, jednak nie jest wymagane, by każdy jakąś posiadał.
+Tabela Nieobecności jest w relacji OW:NJ z Lekcje na zasadzie każda nieobecność dotyczy konkretnej lekcji, jednak nie jest wymagane, by na każdej lekcji ktoś miał nieobecność.
+Tabela Oceny jest w relacji OW:NJ z Uczniowie na zasadzie jedna ocena dotyczy jednego ucznia, jednak nie każdy musi jakąś posiadać.
+Tabela Oceny jest w relacji OW:NJ z Przedmioty na zasadzie każda ocena dotyczy konkretnego przedmiotu, jednak nie z każdego przedmiotu muszą być jakieś oceny.
 
+
+Dodatkowo zawarte są:
+funkcja przedstawiająca spis zajęć dla podanego ucznia,
 
 
 Wkład pracy:
 
 Bartłomiej Błoniarz: 
 Stworzone tabele:
-Obiekty, Inwentarz, Drogi_ewakuacyjne, Place. Oraz korekta pozostałych tabel.
+Obecnosci, Oceny, Termiarz. Oraz korekta pozostałych tabel.
 Stworzone triggery(oraz konieczne do nich funkcje):
-dodaj_place, dodaj_pracownika, usunNauczyciela
-Stworzone widoki:
-Tygodniowa_placa,
+dodaj_pracownika, usunNauczyciela,
 Clear.sql
 
 Inka Sokołowska:
 Stworzone tabele:
 Lekcje, Sale, Uczniowie, Klasy, Pracownicy.
 Stworzone triggery(oraz konieczne do nich funkcje): 
-liczbaDzieci, jednaLekcjaNaRaz, usunSale, uczyNauczyciel, zamienNauczyciela
+liczbaDzieci, jednaLekcjaNaRaz, usunSale, zamienNauczyciela, nieobecnosc, ocena_z_lekcji
 Stworzone funkcje:
 mojPlanLekcji.
-Stworzene widoki:
-Braki_wyposazenia i potrzebne funckje (braki_wyposazenia, wiecej_niz_zero)
 Readme
 
 Plany:

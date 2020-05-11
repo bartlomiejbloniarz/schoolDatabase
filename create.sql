@@ -10,10 +10,7 @@ CREATE TABLE Pracownicy(
     imie CHARACTER VARYING NOT NULL,
     nazwisko CHARACTER VARYING NOT NULL,
     godzinyPracy NUMERIC(2),
-    stanowisko CHARACTER VARYING NOT NULL,
-    tytul VARCHAR  CHECK(tytul='DOKTOR' OR tytul='MAGISTER' OR tytul='PROFESOR' OR tytul='DOKTOR HABILITOWANY' OR tytul='BRAK'),
-    CHECK (stanowisko='NAUCZYCIEL' OR stanowisko='DYREKTOR' OR stanowisko='SEKRETARZ' OR stanowisko='OSOBA SPRZĄTAJĄCA'
-               OR stanowisko='OPIEKA MEDYCZNA' OR stanowisko='SPRZEDAWCA' OR stanowisko='PSYCHOLOG')
+    tytul VARCHAR  CHECK(tytul='DOKTOR' OR tytul='MAGISTER' OR tytul='PROFESOR' OR tytul='DOKTOR HABILITOWANY' OR tytul='BRAK')
 );
 
 CREATE TABLE Klasy(
@@ -55,7 +52,8 @@ CREATE TABLE Oceny(
     index NUMERIC(3) REFERENCES uczniowie,
     przedmiot NUMERIC(2) REFERENCES przedmioty(id),
     ocena NUMERIC(1,1) CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
-    komentarz VARCHAR
+    komentarz VARCHAR,
+    data DATE
 );
 
 CREATE TABLE Nieobecnosci(
@@ -66,15 +64,52 @@ CREATE TABLE Nieobecnosci(
 );
 
 CREATE TABLE Terminarz(
-    klasa varchar(2) REFERENCES klasy,
     lekcja numeric(3) REFERENCES lekcje,
     typ varchar CHECK (typ in ('sprawdzian', 'kartkowka', 'odpowiedz')),
     komentarz varchar,
-    PRIMARY KEY (klasa, lekcja)
+    dzien DATE,
+    PRIMARY KEY (lekcja,dzien)
 );
 
 --TRIGGERS
 
+create or replace function ocena_z_lekcji()
+    returns TRIGGER AS
+$$
+DECLARE
+       klasaUcznia varchar(2);
+begin
+        klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
+
+        IF (SELECT coalesce(COUNT(*),0)
+        FROM lekcje l WHERE l.przedmiot=NEW.przedmiot AND
+        l.klasa=klasaUcznia)=0 THEN RETURN NULL; END IF;
+
+        if NEW.data IS NULL THEN NEW.data=current_timestamp;END IF;
+        return NEW;
+end;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER "ocena_z_lekcji" BEFORE INSERT OR UPDATE ON Oceny FOR EACH ROW EXECUTE PROCEDURE ocena_z_lekcji();
+---------------------------------------------------------------------------------------
+create or replace function obecnosc()
+    returns TRIGGER AS
+$$
+DECLARE
+       klasaUcznia varchar(2);
+begin
+        klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
+
+        IF (SELECT klasa FROM lekcje WHERE lekcje.id=NEW.lekcja)<>klasaUcznia THEN RETURN NULL;END IF;
+
+        return NEW;
+end;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER "obecnosc" BEFORE INSERT OR UPDATE ON Nieobecnosci FOR EACH ROW EXECUTE PROCEDURE obecnosc();
+---------------------------------------------------------------------------------------
 
 create or replace function dodajDziecko()
     returns TRIGGER AS
@@ -132,7 +167,7 @@ RETURNS TRIGGER AS
         FOR a IN SELECT * FROM Pracownicy LOOP
             IF (a.id>b) THEN b=a.id; END IF;
             end loop;
-        RETURN ((b+1)::numeric(2), NEW.imie, NEW.nazwisko, NEW.godzinyPracy, NEW.stanowisko, NEW.tytul);
+        RETURN ((b+1)::numeric(2), NEW.imie, NEW.nazwisko, NEW.godzinyPracy, NEW.tytul);
     end;
     $$
 LANGUAGE plpgsql;
@@ -146,7 +181,7 @@ RETURNS TRIGGER AS
     $$
     DECLARE a RECORD;
     BEGIN
-    IF(SELECT COUNT(*) FROM Klasy WHERE wychowawca=OLD.id)>0 THEN RAISE EXCEPTION 'Znajdz zastepstwo na wychowawstwo';END IF;
+    IF(SELECT coalesce(COUNT(*),0) FROM Klasy WHERE wychowawca=OLD.id)>0 THEN RAISE EXCEPTION 'Znajdz zastepstwo na wychowawstwo';END IF;
     FOR a IN SELECT * FROM Przedmioty WHERE id=OLD.id LOOP
         DELETE FROM Lekcje WHERE przedmiot=a.id;
         END LOOP;
@@ -160,29 +195,11 @@ CREATE TRIGGER usunNauczyciela BEFORE DELETE ON Pracownicy FOR EACH ROW EXECUTE 
 
 ---------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION czy_nauczyciel()
-RETURNS TRIGGER AS
-    $$
-    BEGIN
-
-   IF (SELECT stanowisko FROM Pracownicy WHERE id=NEW.nauczyciel)<>'NAUCZYCIEL' THEN
-        RAISE EXCEPTION 'Ta osoba nie ma odpowiednich kwalifikacji';END IF;
-
-    RETURN NEW;
-    end;
-    $$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER uczyNauczyciel BEFORE INSERT ON Przedmioty FOR EACH ROW EXECUTE PROCEDURE czy_nauczyciel();
-
----------------------------------------------------------------------------------------
-
 CREATE OR REPLACE FUNCTION zamien_nauczyciela()
 RETURNS TRIGGER AS
     $$
     DECLARE record RECORD;
     BEGIN
-        IF(OLD.stanowisko='NAUCZYCIEL' AND NEW.stanowisko<>'NAUCZYCIEL')THEN RAISE EXCEPTION 'Nie można dokonać zamiany';END IF;
        UPDATE Klasy SET wychowawca=NEW.id WHERE wychowawca=OLD.id;
 
        DELETE FROM Lekcje WHERE (SELECT nauczyciel FROM Przedmioty p WHERE p.id=Lekcje.przedmiot)=OLD.id;
@@ -199,18 +216,7 @@ CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUT
 -----------------------------------------------------------------------------------------
 
 --FUNCTIONS
-create or replace function wiecej_niz_zero(a NUMERIC)
-    returns NUMERIC AS
-$$
-  begin
-      IF a<=0 THEN return NULL; END IF;
-      return a;
-end;
-$$
-language plpgsql;
-------to sa funkcje dzialajace razem
 
----------------------------------------------------------------------------------
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
     returns TABLE(nauczyciel NUMERIC(2),sala NUMERIC(2),klasa VARCHAR(2),czas TIME ,dzien VARCHAR) as
 $$
@@ -219,7 +225,7 @@ declare
 begin
     klasaDziecka=(SELECT u.klasa FROM Uczniowie u WHERE u.index=idDziecka);
 
-    return QUERY SELECT * FROM Lekcje WHERE Lekcje.klasa=klasaDziecka;
+    return QUERY SELECT * FROM Lekcje WHERE Lekcje.klasa=klasaDziecka ORDER BY Lekcje.dzien, Lekcje.czas;
 
 end;
 $$
@@ -227,13 +233,14 @@ language plpgsql;
 
 --VIEWS
 
+
 --INSERTS
 
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('A', 'B', 40, 'NAUCZYCIEL', 'MAGISTER');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('C', 'D', 40, 'NAUCZYCIEL', 'MAGISTER');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('E', 'F', 30, 'NAUCZYCIEL', 'DOKTOR');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('G', 'H', 40, 'OSOBA SPRZĄTAJĄCA', 'BRAK');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('A', 'B', 12, 'OPIEKA MEDYCZNA', 'BRAK');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'B', 40,  'MAGISTER');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('C', 'D', 40,  'MAGISTER');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('E', 'F', 30, 'DOKTOR');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('G', 'H', 40,  'BRAK');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'B', 12,  'BRAK');
 
 INSERT INTO Klasy (klasa, wychowawca) VALUES ('1E', 0);
 INSERT INTO Klasy (klasa, wychowawca) VALUES ('4E', 1);
