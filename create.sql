@@ -1,17 +1,9 @@
 --SEQUENCES
 
-CREATE SEQUENCE Pracownicy_id_seq MINVALUE 0 START 0;
+CREATE SEQUENCE Lekcje_id_seq MINVALUE 0 START 0;
 
 --TABLES
 
-CREATE TABLE Place(
-    stanowisko CHARACTER VARYING NOT NULL,
-    CHECK (stanowisko='NAUCZYCIEL' OR stanowisko='DYREKTOR' OR stanowisko='SEKRETARZ' OR stanowisko='OSOBA SPRZĄTAJĄCA'
-               OR stanowisko='OPIEKA MEDYCZNA' OR stanowisko='SPRZEDAWCA' OR stanowisko='PSYCHOLOG'),
-    tytul VARCHAR CHECK(tytul='DOKTOR' OR tytul='MAGISTER' OR tytul='PROFESOR' OR tytul='DOKTOR HABILITOWANY' OR tytul='BRAK'),
-    PRIMARY KEY (stanowisko,tytul),
-    placa NUMERIC(6,2) NOT NULL
-);
 
 CREATE TABLE Pracownicy(
     id NUMERIC(2) NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY CHECK(id>=0),
@@ -21,8 +13,7 @@ CREATE TABLE Pracownicy(
     stanowisko CHARACTER VARYING NOT NULL,
     tytul VARCHAR  CHECK(tytul='DOKTOR' OR tytul='MAGISTER' OR tytul='PROFESOR' OR tytul='DOKTOR HABILITOWANY' OR tytul='BRAK'),
     CHECK (stanowisko='NAUCZYCIEL' OR stanowisko='DYREKTOR' OR stanowisko='SEKRETARZ' OR stanowisko='OSOBA SPRZĄTAJĄCA'
-               OR stanowisko='OPIEKA MEDYCZNA' OR stanowisko='SPRZEDAWCA' OR stanowisko='PSYCHOLOG'),
-    FOREIGN KEY (stanowisko, tytul) REFERENCES Place
+               OR stanowisko='OPIEKA MEDYCZNA' OR stanowisko='SPRZEDAWCA' OR stanowisko='PSYCHOLOG')
 );
 
 CREATE TABLE Klasy(
@@ -38,15 +29,8 @@ CREATE TABLE Uczniowie(
     nazwisko CHARACTER VARYING NOT NULL
 );
 
-CREATE TABLE Drogi_ewakuacyjne(
-    id NUMERIC(2) PRIMARY KEY,
-    nr_klatki NUMERIC(2),
-    nr_wyjscia NUMERIC(2) NOT NULL,
-    miejsce_zbiorki VARCHAR NOT NULL
-);
 CREATE TABLE Sale(
     nr NUMERIC CONSTRAINT PK_SALE PRIMARY KEY,
-    droga_ewakuacyjna NUMERIC(2) NOT NULL REFERENCES Drogi_ewakuacyjne(id),
     liczba_miejsc NUMERIC NOT NULL CHECK (liczba_miejsc>20)
 );
 
@@ -57,44 +41,40 @@ CREATE TABLE Przedmioty(
 );
 
 CREATE TABLE Lekcje(
+    id NUMERIC(3) PRIMARY KEY DEFAULT nextval('Lekcje_id_seq'),
     przedmiot NUMERIC(2) NOT NULL REFERENCES Przedmioty(id),
     sala NUMERIC(2) NOT NULL REFERENCES Sale(nr),
     klasa VARCHAR(2) NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
     dzien CHARACTER VARYING NOT NULL,
     CHECK(dzien='Poniedziałek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
-    PRIMARY KEY(sala,czas,dzien)
+    UNIQUE(sala,czas,dzien)
 );
 
-CREATE TABLE Obiekty(
-    id NUMERIC(2) PRIMARY KEY,
-    nazwa VARCHAR NOT NULL UNIQUE,
-    wartosc NUMERIC NOT NULL
+CREATE TABLE Oceny(
+    index NUMERIC(3) REFERENCES uczniowie,
+    przedmiot NUMERIC(2) REFERENCES przedmioty(id),
+    ocena NUMERIC(1,1) CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
+    komentarz VARCHAR
 );
 
-CREATE TABLE Inwentaz(
-    obiekt NUMERIC(2) REFERENCES Obiekty(id),
-    sala NUMERIC(2) REFERENCES Sale(nr),
-    PRIMARY KEY (obiekt, sala),
-    ilosc NUMERIC(2)
+CREATE TABLE Nieobecnosci(
+    index NUMERIC(3) REFERENCES uczniowie,
+    lekcja NUMERIC(3) REFERENCES Lekcje,
+    typ CHAR(1) CHECK (typ in ('N', 'U', 'W', 'G')) DEFAULT 'N',
+    PRIMARY KEY (index, lekcja)
+);
+
+CREATE TABLE Terminarz(
+    klasa varchar(2) REFERENCES klasy,
+    lekcja numeric(3) REFERENCES lekcje,
+    typ varchar CHECK (typ in ('sprawdzian', 'kartkowka', 'odpowiedz')),
+    komentarz varchar,
+    PRIMARY KEY (klasa, lekcja)
 );
 
 --TRIGGERS
 
-CREATE OR REPLACE FUNCTION usun_sale()
-RETURNS TRIGGER AS
-    $$
-    DECLARE record RECORD;
-    BEGIN
-    DELETE FROM Inwentaz WHERE sala=OLD.nr;
-    RETURN OLD;
-    end;
-    $$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER usun_sale BEFORE UPDATE ON Sale FOR EACH ROW EXECUTE PROCEDURE usun_sale();
-
---------------------------------------------------------------------------------------
 
 create or replace function dodajDziecko()
     returns TRIGGER AS
@@ -138,23 +118,6 @@ create or replace function dodajLekcje()
 LANGUAGE plpgsql;
 
 CREATE TRIGGER "jednaLekcjaNaRaz" BEFORE INSERT OR UPDATE ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodajLekcje();
-
----------------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION dodaj_place()
-RETURNS TRIGGER AS
-    $$
-    BEGIN
-        IF (NEW.stanowisko!='NAUCZYCIEL' AND NEW.tytul!='BRAK') THEN RAISE EXCEPTION 'Błąd';
-        END IF;
-        IF (NEW.placa<12) THEN RAISE EXCEPTION 'To jest wyzysk';
-        END IF;
-        RETURN NEW;
-    end;
-    $$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER dodaj_place BEFORE INSERT OR UPDATE ON Place FOR EACH ROW EXECUTE PROCEDURE dodaj_place();
 
 ---------------------------------------------------------------------------------------
 
@@ -246,28 +209,7 @@ end;
 $$
 language plpgsql;
 ------to sa funkcje dzialajace razem
-create or replace function braki_wyposazenia()
-    returns TABLE(sala NUMERIC(2),krzesla NUMERIC,lawki NUMERIC) as
-$$
-declare
-    nrKrzesla NUMERIC;
-    nrLawki NUMERIC;
-begin
-   nrKrzesla=(SELECT id FROM Obiekty o WHERE o.nazwa='krzeslo');
-   nrLawki=(SELECT id FROM Obiekty o WHERE o.nazwa='lawka');
 
-    return QUERY SELECT s.nr AS "sala",
-                        wiecej_niz_zero(liczba_miejsc+1-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
-                                i.obiekt=nrKrzesla),0) ) AS "krzesla",
-                        wiecej_niz_zero(liczba_miejsc-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
-                                i.obiekt=nrLawki),0) ) AS "lawki"
-    FROM Sale s WHERE wiecej_niz_zero(liczba_miejsc+1-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
-                                i.obiekt=nrKrzesla),0) ) IS NOT NULL OR
-                        wiecej_niz_zero(liczba_miejsc-COALESCE((SELECT ilosc FROM Inwentaz i WHERE i.sala=s.nr AND
-                                i.obiekt=nrLawki),0) ) IS NOT NULL;
-end;
-$$
-language plpgsql;
 ---------------------------------------------------------------------------------
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
     returns TABLE(nauczyciel NUMERIC(2),sala NUMERIC(2),klasa VARCHAR(2),czas TIME ,dzien VARCHAR) as
@@ -285,20 +227,7 @@ language plpgsql;
 
 --VIEWS
 
-CREATE OR REPLACE VIEW Tygodniowa_placa AS
-    SELECT imie, nazwisko, placa*godzinyPracy AS Placa
-FROM pracownicy pr LEFT JOIN place pl ON (pr.tytul=pl.tytul AND pr.stanowisko=pl.stanowisko);
-
-CREATE OR REPLACE VIEW braki_wyposazenia AS
-    SELECT * FROM braki_wyposazenia();
-
 --INSERTS
-
-INSERT INTO Place (stanowisko, tytul, placa) VALUES ('NAUCZYCIEL', 'MAGISTER', 18);
-INSERT INTO Place (stanowisko, tytul, placa) VALUES ('NAUCZYCIEL', 'DOKTOR', 25);
-INSERT INTO Place (stanowisko, tytul, placa) VALUES ('NAUCZYCIEL', 'PROFESOR', 30);
-INSERT INTO Place (stanowisko, tytul, placa) VALUES ('OSOBA SPRZĄTAJĄCA', 'BRAK', 12);
-INSERT INTO Place (stanowisko, tytul, placa) VALUES ('OPIEKA MEDYCZNA', 'BRAK', 12);
 
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('A', 'B', 40, 'NAUCZYCIEL', 'MAGISTER');
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, stanowisko, tytul) VALUES ('C', 'D', 40, 'NAUCZYCIEL', 'MAGISTER');
@@ -328,31 +257,13 @@ INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (104, '1E', 'G', 'H'
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (105, '1E', 'H', 'I');
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (106, '1E', 'H', 'J');
 
-INSERT INTO Drogi_ewakuacyjne (id, nr_klatki, nr_wyjscia, miejsce_zbiorki) VALUES (0, 0, 0, 'Plac Sikorskiego');
-INSERT INTO Drogi_ewakuacyjne (id, nr_wyjscia, miejsce_zbiorki) VALUES (1, 0, 'Plac Sikorskiego');
 
-INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (1, 0, 35);
-INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (2, 0, 37);
-INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (3, 0, 25);
-INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (4, 0, 28);
-INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (12, 1, 25);
-INSERT INTO Sale (nr, droga_ewakuacyjna, liczba_miejsc) VALUES (11, 1, 45);
-
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (0, 'krzeslo', 25);
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (1, 'lawka', 100);
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (2, 'laptop', 1200);
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (3, 'projektor', 300);
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (4, 'tablica', 150);
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (5, 'mapa', 50);
-INSERT INTO Obiekty (id, nazwa, wartosc) VALUES (6, 'biurko', 100);
-
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (0, 1, 36);
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (1, 1, 18);
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (6, 1, 1);
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (2, 1, 1);
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (3, 1, 1);
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (0, 2, 50);
-INSERT INTO Inwentaz (obiekt, sala, ilosc) VALUES (1, 2, 15);
+INSERT INTO Sale (nr, liczba_miejsc) VALUES (1, 35);
+INSERT INTO Sale (nr, liczba_miejsc) VALUES (2, 37);
+INSERT INTO Sale (nr, liczba_miejsc) VALUES (3, 25);
+INSERT INTO Sale (nr, liczba_miejsc) VALUES (4, 28);
+INSERT INTO Sale (nr, liczba_miejsc) VALUES (12, 25);
+INSERT INTO Sale (nr, liczba_miejsc) VALUES (11, 45);
 
 INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (0, 'Matematyka', 0);
 INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (1, 'Matematyka', 1);
