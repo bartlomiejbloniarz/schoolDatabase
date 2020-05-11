@@ -1,17 +1,5 @@
-DROP TABLE if EXISTS Przedmioty CASCADE;
-DROP TABLE if EXISTS Lekcje;
-DROP TABLE if EXISTS Sale CASCADE;
-DROP TABLE if EXISTS Uczniowie;
-DROP TABLE if EXISTS Klasy CASCADE;
-DROP TABLE if EXISTS Pracownicy CASCADE;
-DROP TABLE if EXISTS Place;
-DROP TABLE if EXISTS Obiekty CASCADE;
-DROP TABLE if EXISTS Inwentaz;
-DROP TABLE if EXISTS Drogi_ewakuacyjne;
-
 --SEQUENCES
 
-DROP SEQUENCE IF EXISTS Pracownicy_id_seq;
 CREATE SEQUENCE Pracownicy_id_seq MINVALUE 0 START 0;
 
 --TABLES
@@ -93,6 +81,21 @@ CREATE TABLE Inwentaz(
 
 --TRIGGERS
 
+CREATE OR REPLACE FUNCTION usun_sale()
+RETURNS TRIGGER AS
+    $$
+    DECLARE record RECORD;
+    BEGIN
+    DELETE FROM Inwentaz WHERE sala=OLD.nr;
+    RETURN OLD;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER usun_sale BEFORE UPDATE ON Sale FOR EACH ROW EXECUTE PROCEDURE usun_sale();
+
+--------------------------------------------------------------------------------------
+
 create or replace function dodajDziecko()
     returns TRIGGER AS
     $$
@@ -170,8 +173,8 @@ RETURNS TRIGGER AS
     end;
     $$
 LANGUAGE plpgsql;
-DROP TRIGGER IF EXISTS dodaj_place ON pracownicy;
-CREATE TRIGGER dodaj_place BEFORE INSERT ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE dodaj_pracownika();
+
+CREATE TRIGGER dodaj_pracownika BEFORE INSERT ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE dodaj_pracownika();
 
 ---------------------------------------------------------------------------------------
 
@@ -190,7 +193,6 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS usunNauczyciela ON Pracownicy;
 CREATE TRIGGER usunNauczyciela BEFORE DELETE ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE usun_nauczyciela();
 
 ---------------------------------------------------------------------------------------
@@ -208,7 +210,6 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS uczyNauczyciel ON Pracownicy;
 CREATE TRIGGER uczyNauczyciel BEFORE INSERT ON Przedmioty FOR EACH ROW EXECUTE PROCEDURE czy_nauczyciel();
 
 ---------------------------------------------------------------------------------------
@@ -230,11 +231,9 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS  zamienNauczyciela ON Pracownicy;
 CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUTE PROCEDURE zamien_nauczyciela();
 
 -----------------------------------------------------------------------------------------
-
 
 --FUNCTIONS
 create or replace function wiecej_niz_zero(a NUMERIC)
@@ -276,7 +275,7 @@ $$
 declare
     klasaDziecka VARCHAR;
 begin
-    klasaDziecka=(SELECT klasa FROM Uczniowie u WHERE u.index=idDziecka);
+    klasaDziecka=(SELECT u.klasa FROM Uczniowie u WHERE u.index=idDziecka);
 
     return QUERY SELECT * FROM Lekcje WHERE Lekcje.klasa=klasaDziecka;
 
@@ -286,8 +285,8 @@ language plpgsql;
 
 --VIEWS
 
-CREATE OR REPLACE VIEW Pracownicy_wyplaty AS
-    SELECT imie, nazwisko, placa
+CREATE OR REPLACE VIEW Tygodniowa_placa AS
+    SELECT imie, nazwisko, placa*godzinyPracy AS Placa
 FROM pracownicy pr LEFT JOIN place pl ON (pr.tytul=pl.tytul AND pr.stanowisko=pl.stanowisko);
 
 CREATE OR REPLACE VIEW braki_wyposazenia AS
@@ -319,6 +318,15 @@ INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (406, '4E', 'F', 'F'
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (101, '1E', 'G', 'G');
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (102, '1E', 'H', 'H');
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (103, '1E', 'H', 'H');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (407, '4E', 'A', 'B');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (408, '4E', 'B', 'C');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (409, '4E', 'C', 'D');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (410, '4E', 'D', 'E');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (411, '4E', 'E', 'F');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (412, '4E', 'F', 'G');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (104, '1E', 'G', 'H');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (105, '1E', 'H', 'I');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (106, '1E', 'H', 'J');
 
 INSERT INTO Drogi_ewakuacyjne (id, nr_klatki, nr_wyjscia, miejsce_zbiorki) VALUES (0, 0, 0, 'Plac Sikorskiego');
 INSERT INTO Drogi_ewakuacyjne (id, nr_wyjscia, miejsce_zbiorki) VALUES (1, 0, 'Plac Sikorskiego');
@@ -356,14 +364,12 @@ INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 2, '1E', '12
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, '4E', '12:00', 'Środa');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '11:00', 'Piątek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '1E', '8:00', 'Czwartek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, '4E', '10:00', 'Środa');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, '4E', '11:00', 'Środa');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '9:00', 'Czwartek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '10:00', 'Czwartek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '10:00', 'Piątek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 12, '1E', '10:00', 'Piątek');
 
-SELECT * FROM Place;
-SELECT * FROM Pracownicy;
-SELECT * FROM Pracownicy_wyplaty;
-SELECT * FROM Klasy;
-SELECT * FROM Uczniowie;
-SELECT * FROM Lekcje;
-SELECT * FROM Tygodniowa_placa;
---DELETE FROM Pracownicy WHERE id=2;
 
 
