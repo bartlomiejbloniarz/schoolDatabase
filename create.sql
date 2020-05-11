@@ -279,16 +279,19 @@ LANGUAGE plpgsql;
 CREATE TRIGGER dodajZastepstwo BEFORE INSERT OR UPDATE ON zastepstwa FOR EACH ROW EXECUTE PROCEDURE dodajZastepstwo();
 
 --FUNCTIONS
-
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
-    returns TABLE(nauczyciel NUMERIC(2),sala NUMERIC(2),klasa VARCHAR(2),czas TIME ,dzien VARCHAR) as
+    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala NUMERIC(2),nauczyciel varchar) as
 $$
 declare
     klasaDziecka VARCHAR;
 begin
     klasaDziecka=(SELECT u.klasa FROM Uczniowie u WHERE u.index=idDziecka);
 
-    return QUERY SELECT * FROM Lekcje WHERE Lekcje.klasa=klasaDziecka ORDER BY Lekcje.dzien, Lekcje.czas;
+    return QUERY SELECT (SELECT p.nazwa FROM przedmioty p WHERE p.id=l.przedmiot) AS przedmiot,
+    to_char(l.czas, 'HH:MI'), l.dzien, l.sala,
+    (SELECT nazwisko FROM Pracownicy
+    WHERE id=(SELECT p.nauczyciel FROM przedmioty p WHERE p.id=l.przedmiot)) AS nauczyciel
+    FROM Lekcje l WHERE l.klasa=klasaDziecka ORDER BY l.dzien, l.czas;
 
 end;
 $$
@@ -310,11 +313,11 @@ language plpgsql;
 
 --INSERTS
 
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'B', 40,  'MAGISTER');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('C', 'D', 40,  'MAGISTER');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('E', 'F', 30, 'DOKTOR');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('G', 'H', 40,  'BRAK');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'B', 12,  'BRAK');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'Bananowski', 40,  'MAGISTER');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('C', 'Drozd', 40,  'MAGISTER');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('E', 'Figowa', 30, 'DOKTOR');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('G', 'Haber', 40,  'BRAK');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'Borówka', 12,  'BRAK');
 
 INSERT INTO Klasy (klasa, wychowawca) VALUES ('1E', 0);
 INSERT INTO Klasy (klasa, wychowawca) VALUES ('4E', 1);
@@ -379,6 +382,5 @@ INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 0, '11.05.2020');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 0, '11.05.2020');
 
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '18.05.2020');
-
 
 
