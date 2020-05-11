@@ -1,13 +1,13 @@
 
 Baza danych przedstawiająca schemat szkoły. 
 Zawiera informacje o 
-przedmiotach tj. typach prowadzonych zajęć (tabela Przedmioty), 
+przedmiotach tj. typach prowadzonych zajęć połączonych z prowadzącymi je nauczycielami (tabela Przedmioty), 
 lekcjach tj. konkretnych zajęciach odbywających się w danych godzinach i dniach(tablea Lekcje),
 salach tj. pomieszczeniach (tabela Sale), 
 uczniach uczęszczających do szkoły (tabela Uczniowie), 
 klasach tj. grupach ucznów (np.6a)(tabela Klasy), 
 pracownikach tj. nauczycielach (tabela pracownicy),
-Obecnościach uczniów na lekcjach  (tabela Obecności),
+Obecnościach uczniów na lekcjach  (tabela Nieobecności),
 Ocenach uczniów z konkretnych przedmiotów (Tabela Oceny),
 Formach sprawdzania wiedzy np. sprawdzianach, kartkówkach (tabela Terminarz)
 
@@ -37,14 +37,17 @@ Wkład pracy:
 
 Bartłomiej Błoniarz: 
 Stworzone tabele:
-Obecnosci, Oceny, Termiarz. Oraz korekta pozostałych tabel.
+Nieobecnosci, Oceny, Termiarz, Przedmioty. Oraz korekta pozostałych tabel.
 Stworzone triggery(oraz konieczne do nich funkcje):
-dodaj_pracownika, usunNauczyciela,
+dodaj_pracownika, usunNauczyciela, dodajTerminarz, dodajNieobecnosci, dodajZastepstwo
+Stworzone funkcje:
+terminarzKlasy
+Przykładowe dane
 Clear.sql
 
 Inka Sokołowska:
 Stworzone tabele:
-Lekcje, Sale, Uczniowie, Klasy, Pracownicy.
+Lekcje, Sale, Uczniowie, Klasy, Pracownicy, Zastepstwa.
 Stworzone triggery(oraz konieczne do nich funkcje): 
 liczbaDzieci, jednaLekcjaNaRaz, usunSale, zamienNauczyciela, nieobecnosc, ocena_z_lekcji
 Stworzone funkcje:

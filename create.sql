@@ -51,7 +51,7 @@ CREATE TABLE Lekcje(
 CREATE TABLE Oceny(
     index NUMERIC(3) REFERENCES uczniowie,
     przedmiot NUMERIC(2) REFERENCES przedmioty(id),
-    ocena NUMERIC(1,1) CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
+    ocena NUMERIC(3,2) CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
     komentarz VARCHAR,
     data DATE
 );
@@ -60,7 +60,8 @@ CREATE TABLE Nieobecnosci(
     index NUMERIC(3) REFERENCES uczniowie,
     lekcja NUMERIC(3) REFERENCES Lekcje,
     typ CHAR(1) CHECK (typ in ('N', 'U', 'W', 'G')) DEFAULT 'N',
-    PRIMARY KEY (index, lekcja)
+    data DATE,
+    PRIMARY KEY (index, lekcja, data)
 );
 
 CREATE TABLE Terminarz(
@@ -69,6 +70,13 @@ CREATE TABLE Terminarz(
     komentarz varchar,
     dzien DATE,
     PRIMARY KEY (lekcja,dzien)
+);
+
+CREATE TABLE Zastepstwa(
+    lekcja NUMERIC(3) REFERENCES Lekcje,
+    nauczyciel NUMERIC(2) REFERENCES Pracownicy(id),
+    data DATE,
+    PRIMARY KEY (lekcja,data)
 );
 
 --TRIGGERS
@@ -93,7 +101,7 @@ LANGUAGE plpgsql;
 
 CREATE TRIGGER "ocena_z_lekcji" BEFORE INSERT OR UPDATE ON Oceny FOR EACH ROW EXECUTE PROCEDURE ocena_z_lekcji();
 ---------------------------------------------------------------------------------------
-create or replace function obecnosc()
+create or replace function nieobecnosc()
     returns TRIGGER AS
 $$
 DECLARE
@@ -108,7 +116,7 @@ end;
 $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "obecnosc" BEFORE INSERT OR UPDATE ON Nieobecnosci FOR EACH ROW EXECUTE PROCEDURE obecnosc();
+CREATE TRIGGER "nieobecnosc" BEFORE INSERT OR UPDATE ON Nieobecnosci FOR EACH ROW EXECUTE PROCEDURE nieobecnosc();
 ---------------------------------------------------------------------------------------
 
 create or replace function dodajDziecko()
@@ -215,6 +223,61 @@ CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUT
 
 -----------------------------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION dodajTerminarz()
+RETURNS TRIGGER AS
+    $$
+    DECLARE a varchar;
+    b NUMERIC;
+    BEGIN
+        a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
+        b = (EXTRACT(DOW FROM NEW.dzien::timestamp));
+        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
+        ELSE RAISE EXCEPTION 'Błędna data';
+        END IF;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER dodajTerminarz BEFORE INSERT OR UPDATE ON Terminarz FOR EACH ROW EXECUTE PROCEDURE dodajTerminarz();
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION dodajNieobecnosc()
+RETURNS TRIGGER AS
+    $$
+    DECLARE a varchar;
+    b NUMERIC;
+    BEGIN
+        a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
+        b = (EXTRACT(DOW FROM NEW.data::timestamp));
+        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
+        ELSE RAISE EXCEPTION 'Błędna data';
+        END IF;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER dodajNieobecnosc BEFORE INSERT OR UPDATE ON nieobecnosci FOR EACH ROW EXECUTE PROCEDURE dodajNieobecnosc();
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION dodajZastepstwo()
+RETURNS TRIGGER AS
+    $$
+    DECLARE a varchar;
+    b NUMERIC;
+    BEGIN
+        a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
+        b = (EXTRACT(DOW FROM NEW.data::timestamp));
+        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
+        ELSE RAISE EXCEPTION 'Błędna data';
+        END IF;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER dodajZastepstwo BEFORE INSERT OR UPDATE ON zastepstwa FOR EACH ROW EXECUTE PROCEDURE dodajZastepstwo();
+
 --FUNCTIONS
 
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
@@ -229,6 +292,17 @@ begin
 
 end;
 $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION terminarzKlasy(kl varchar(2))
+RETURNS TABLE (lekcja numeric(3), typ varchar, komentarz varchar, dzien DATE) AS
+    $$
+    BEGIN
+        RETURN QUERY SELECT * FROM terminarz WHERE terminarz.lekcja IN (SELECT id FROM lekcje WHERE lekcje.klasa=kl);
+    end;
+    $$
 language plpgsql;
 
 --VIEWS
@@ -288,6 +362,23 @@ INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '9
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '10:00', 'Czwartek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '10:00', 'Piątek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 12, '1E', '10:00', 'Piątek');
+
+INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (0, 'sprawdzian', '', '11.05.2020');
+INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '11.05.2020');
+
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 0, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (402, 0, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (403, 1, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (404, 0, 4, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (101, 2, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (102, 0, 3, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (103, 0, 3.5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 3, 5.5, '');
+
+INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 0, '11.05.2020');
+INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 0, '11.05.2020');
+
+INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '18.05.2020');
 
 
 
