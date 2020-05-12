@@ -1,5 +1,3 @@
-DROP VIEW IF EXISTS braki_wyposazenia;
-DROP VIEW IF EXISTS tygodniowa_placa;
 DROP FUNCTION if EXISTS terminarzklasy(kl varchar);
 DROP FUNCTION IF EXISTS mojplanlekcji(iddziecka numeric);
 DROP FUNCTION IF EXISTS dodajZastepstwo() CASCADE;
@@ -13,6 +11,7 @@ DROP FUNCTION IF EXISTS dodajlekcje() CASCADE;
 DROP FUNCTION IF EXISTS dodajdziecko() CASCADE;
 DROP FUNCTION IF EXISTS nieobecnosc() CASCADE;
 DROP FUNCTION IF EXISTS ocena_z_lekcji() CASCADE;
+DROP TABLE if EXISTS Nauczyciele_prowadzacy;
 DROP TABLE if EXISTS zastepstwa;
 DROP TABLE if EXISTS Terminarz;
 DROP TABLE if EXISTS nieobecnosci;

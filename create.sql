@@ -2,46 +2,55 @@
 
 CREATE SEQUENCE Lekcje_id_seq MINVALUE 0 START 0;
 
+--ENUMS
+
+CREATE TYPE TYTUL AS ENUM ('DOKTOR', 'MAGISTER', 'PROFESOR', 'DOKTOR HABILITOWANY');
+
 --TABLES
 
-
 CREATE TABLE Pracownicy(
-    id NUMERIC(2) NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY CHECK(id>=0),
+    id INTEGER NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY CHECK(id>=0),
     imie CHARACTER VARYING NOT NULL,
     nazwisko CHARACTER VARYING NOT NULL,
     godzinyPracy NUMERIC(2),
-    tytul VARCHAR  CHECK(tytul='DOKTOR' OR tytul='MAGISTER' OR tytul='PROFESOR' OR tytul='DOKTOR HABILITOWANY' OR tytul='BRAK')
+    tytul TYTUL
 );
 
 CREATE TABLE Klasy(
+    nr_klasy NUMERIC(1) NOT NULL,
     klasa VARCHAR(2) NOT NULL,
     PRIMARY KEY (klasa),
-    wychowawca NUMERIC(2) NOT NULL REFERENCES Pracownicy(id)
+    wychowawca NUMERIC(2) NOT NULL REFERENCES Pracownicy(id),
+    check(klasa>0 AND klasa<7)
 );
 
 CREATE TABLE Uczniowie(
-    index NUMERIC(3) CONSTRAINT PK_UCZ PRIMARY KEY,
+    index INTEGER CONSTRAINT PK_UCZ PRIMARY KEY,
     klasa CHARACTER(2) NOT NULL REFERENCES Klasy(klasa),
     imie CHARACTER VARYING NOT NULL,
     nazwisko CHARACTER VARYING NOT NULL
 );
 
 CREATE TABLE Sale(
-    nr NUMERIC CONSTRAINT PK_SALE PRIMARY KEY,
+    nr INTEGER CONSTRAINT PK_SALE PRIMARY KEY,
     liczba_miejsc NUMERIC NOT NULL CHECK (liczba_miejsc>20)
 );
 
 CREATE TABLE Przedmioty(
-    id NUMERIC(2) PRIMARY KEY,
-    nazwa CHARACTER VARYING NOT NULL,
-    nauczyciel NUMERIC(2) NOT NULL REFERENCES Pracownicy(id)
+    id INTEGER PRIMARY KEY,
+    nazwa CHARACTER VARYING NOT NULL
+);
+CREATE TABLE Nauczyciele_powadzacy(
+    id INTEGER,
+    nauczyciel NUMERIC(2) NOT NULL REFERENCES Pracownicy(id),
+    PRIMARY KEY (id,nauczyciel)
 );
 
 CREATE TABLE Lekcje(
-    id NUMERIC(3) PRIMARY KEY DEFAULT nextval('Lekcje_id_seq'),
-    przedmiot NUMERIC(2) NOT NULL REFERENCES Przedmioty(id),
-    sala NUMERIC(2) NOT NULL REFERENCES Sale(nr),
-    klasa VARCHAR(2) NOT NULL REFERENCES Klasy(klasa),
+    id INTEGER PRIMARY KEY DEFAULT nextval('Lekcje_id_seq'),
+    przedmiot INTEGER NOT NULL REFERENCES Przedmioty(id),
+    sala INTEGER NOT NULL REFERENCES Sale(nr),
+    klasa INTEGER NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
     dzien CHARACTER VARYING NOT NULL,
     CHECK(dzien='Poniedziałek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
@@ -49,23 +58,23 @@ CREATE TABLE Lekcje(
 );
 
 CREATE TABLE Oceny(
-    index NUMERIC(3) REFERENCES uczniowie,
-    przedmiot NUMERIC(2) REFERENCES przedmioty(id),
+    index INTEGER REFERENCES uczniowie,
+    przedmiot INTEGER REFERENCES przedmioty(id),
     ocena NUMERIC(3,2) CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
     komentarz VARCHAR,
     data DATE
 );
 
 CREATE TABLE Nieobecnosci(
-    index NUMERIC(3) REFERENCES uczniowie,
-    lekcja NUMERIC(3) REFERENCES Lekcje,
+    index INTEGER REFERENCES uczniowie,
+    lekcja INTEGER REFERENCES Lekcje,
     typ CHAR(1) CHECK (typ in ('N', 'U', 'W', 'G')) DEFAULT 'N',
     data DATE,
     PRIMARY KEY (index, lekcja, data)
 );
 
 CREATE TABLE Terminarz(
-    lekcja numeric(3) REFERENCES lekcje,
+    lekcja INTEGER REFERENCES lekcje,
     typ varchar CHECK (typ in ('sprawdzian', 'kartkowka', 'odpowiedz')),
     komentarz varchar,
     dzien DATE,
@@ -73,8 +82,8 @@ CREATE TABLE Terminarz(
 );
 
 CREATE TABLE Zastepstwa(
-    lekcja NUMERIC(3) REFERENCES Lekcje,
-    nauczyciel NUMERIC(2) REFERENCES Pracownicy(id),
+    lekcja INTEGER REFERENCES Lekcje,
+    nauczyciel INTEGER REFERENCES Pracownicy(id),
     data DATE,
     PRIMARY KEY (lekcja,data)
 );
@@ -193,7 +202,7 @@ RETURNS TRIGGER AS
     FOR a IN SELECT * FROM Przedmioty WHERE id=OLD.id LOOP
         DELETE FROM Lekcje WHERE przedmiot=a.id;
         END LOOP;
-    DELETE FROM przedmioty WHERE nauczyciel=OLD.id;
+    DELETE FROM Nauczyciele_powadzacy WHERE nauczyciel=OLD.id;
     RETURN OLD;
     end;
     $$
@@ -210,9 +219,9 @@ RETURNS TRIGGER AS
     BEGIN
        UPDATE Klasy SET wychowawca=NEW.id WHERE wychowawca=OLD.id;
 
-       DELETE FROM Lekcje WHERE (SELECT nauczyciel FROM Przedmioty p WHERE p.id=Lekcje.przedmiot)=OLD.id;
+       DELETE FROM Lekcje WHERE (SELECT nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id=Lekcje.przedmiot)=OLD.id;
        --nauczyciel=OLD.id;
-       DELETE FROM Przedmioty WHERE nauczyciel=OLD.id;
+       DELETE FROM Nauczyciele_powadzacy WHERE nauczyciel=OLD.id;
 
         RETURN NEW;
     end;
@@ -231,7 +240,8 @@ RETURNS TRIGGER AS
     BEGIN
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.dzien::timestamp));
-        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
+        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3)
+               OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
         ELSE RAISE EXCEPTION 'Błędna data';
         END IF;
     end;
@@ -250,7 +260,8 @@ RETURNS TRIGGER AS
     BEGIN
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.data::timestamp));
-        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
+        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3)
+               OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
         ELSE RAISE EXCEPTION 'Błędna data';
         END IF;
     end;
@@ -269,18 +280,34 @@ RETURNS TRIGGER AS
     BEGIN
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.data::timestamp));
-        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4) OR (a='Piątek' AND b=5)) THEN RETURN NEW;
+        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4)
+               OR (a='Piątek' AND b=5)) THEN RETURN NEW;
         ELSE RAISE EXCEPTION 'Błędna data';
         END IF;
+
     end;
     $$
 LANGUAGE plpgsql;
 
 CREATE TRIGGER dodajZastepstwo BEFORE INSERT OR UPDATE ON zastepstwa FOR EACH ROW EXECUTE PROCEDURE dodajZastepstwo();
 
+----------------------------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION dodaj_klase()
+RETURNS TRIGGER AS
+$$
+BEGIN
+    IF NOT(NEW.klasa ~ '^[1-6][a-z]$') THEN RETURN NULL;END IF;
+    RETURN NEW;
+end;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER dodaj_klase BEFORE INSERT OR UPDATE ON Klasy FOR EACH ROW EXECUTE PROCEDURE dodaj_klase();
+
 --FUNCTIONS
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
-    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala NUMERIC(2),nauczyciel varchar) as
+    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar) as
 $$
 declare
     klasaDziecka VARCHAR;
@@ -290,7 +317,7 @@ begin
     return QUERY SELECT (SELECT p.nazwa FROM przedmioty p WHERE p.id=l.przedmiot) AS przedmiot,
     to_char(l.czas, 'HH:MI'), l.dzien, l.sala,
     (SELECT nazwisko FROM Pracownicy
-    WHERE id=(SELECT p.nauczyciel FROM przedmioty p WHERE p.id=l.przedmiot)) AS nauczyciel
+    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id=l.przedmiot)) AS nauczyciel
     FROM Lekcje l WHERE l.klasa=klasaDziecka ORDER BY l.dzien, l.czas;
 
 end;
@@ -300,7 +327,7 @@ language plpgsql;
 -----------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION terminarzKlasy(kl varchar(2))
-RETURNS TABLE (lekcja numeric(3), typ varchar, komentarz varchar, dzien DATE) AS
+RETURNS TABLE (lekcja INTEGER, typ varchar, komentarz varchar, dzien DATE) AS
     $$
     BEGIN
         RETURN QUERY SELECT * FROM terminarz WHERE terminarz.lekcja IN (SELECT id FROM lekcje WHERE lekcje.klasa=kl);
@@ -349,10 +376,15 @@ INSERT INTO Sale (nr, liczba_miejsc) VALUES (4, 28);
 INSERT INTO Sale (nr, liczba_miejsc) VALUES (12, 25);
 INSERT INTO Sale (nr, liczba_miejsc) VALUES (11, 45);
 
-INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (0, 'Matematyka', 0);
-INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (1, 'Matematyka', 1);
-INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (2, 'Chemia', 2);
-INSERT INTO Przedmioty (id, nazwa, nauczyciel) VALUES (3, 'Biologia', 2);
+INSERT INTO Przedmioty (id, nazwa) VALUES (0, 'Matematyka');
+INSERT INTO Przedmioty (id, nazwa) VALUES (2, 'Chemia');
+INSERT INTO Przedmioty (id, nazwa) VALUES (3, 'Biologia');
+
+INSERT INTO Nauczyciele_powadzacy VALUES (0,0);
+INSERT INTO Nauczyciele_powadzacy VALUES (0,1);
+INSERT INTO Nauczyciele_powadzacy VALUES (2,2);
+INSERT INTO Nauczyciele_powadzacy VALUES (3,2);
+
 
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 1, '4E', '12:00', 'Poniedziałek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 2, '1E', '12:00', 'Poniedziałek');
@@ -381,6 +413,4 @@ INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 3, 5.5, '');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 0, '11.05.2020');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 0, '11.05.2020');
 
-INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '18.05.2020');
-
-
+INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '05.18.2020');
