@@ -19,9 +19,9 @@ CREATE TABLE Pracownicy(
 CREATE TABLE Klasy(
     nr_klasy NUMERIC(1) NOT NULL,
     klasa VARCHAR(2) NOT NULL,
+    wychowawca INTEGER NOT NULL REFERENCES Pracownicy(id),
     PRIMARY KEY (klasa),
-    wychowawca NUMERIC(2) NOT NULL REFERENCES Pracownicy(id),
-    check(klasa>0 AND klasa<7)
+    check(nr_klasy>0 AND nr_klasy<7)
 );
 
 CREATE TABLE Uczniowie(
@@ -41,16 +41,17 @@ CREATE TABLE Przedmioty(
     nazwa CHARACTER VARYING NOT NULL
 );
 CREATE TABLE Nauczyciele_powadzacy(
-    id INTEGER,
-    nauczyciel NUMERIC(2) NOT NULL REFERENCES Pracownicy(id),
-    PRIMARY KEY (id,nauczyciel)
+    id INTEGER PRIMARY KEY,
+    id_przedmiot INTEGER references Przedmioty(id),
+    nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id)
+    --PRIMARY KEY (id_przedmiot,nauczyciel)
 );
 
 CREATE TABLE Lekcje(
     id INTEGER PRIMARY KEY DEFAULT nextval('Lekcje_id_seq'),
-    przedmiot INTEGER NOT NULL REFERENCES Przedmioty(id),
+    przedmiot INTEGER NOT NULL REFERENCES Nauczyciele_powadzacy(id),
     sala INTEGER NOT NULL REFERENCES Sale(nr),
-    klasa INTEGER NOT NULL REFERENCES Klasy(klasa),
+    klasa CHARACTER VARYING NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
     dzien CHARACTER VARYING NOT NULL,
     CHECK(dzien='Poniedziałek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
@@ -177,14 +178,14 @@ CREATE OR REPLACE FUNCTION dodaj_pracownika()
 RETURNS TRIGGER AS
     $$
     DECLARE a RECORD;
-        b NUMERIC(2);
+        b INTEGER;
     BEGIN
         IF (NEW.id IS NOT NULL) THEN RETURN NEW; END IF;
-        b=-1::numeric(2);
+        b=-1;
         FOR a IN SELECT * FROM Pracownicy LOOP
             IF (a.id>b) THEN b=a.id; END IF;
             end loop;
-        RETURN ((b+1)::numeric(2), NEW.imie, NEW.nazwisko, NEW.godzinyPracy, NEW.tytul);
+        RETURN ((b+1), NEW.imie, NEW.nazwisko, NEW.godzinyPracy, NEW.tytul);
     end;
     $$
 LANGUAGE plpgsql;
@@ -219,7 +220,7 @@ RETURNS TRIGGER AS
     BEGIN
        UPDATE Klasy SET wychowawca=NEW.id WHERE wychowawca=OLD.id;
 
-       DELETE FROM Lekcje WHERE (SELECT nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id=Lekcje.przedmiot)=OLD.id;
+       DELETE FROM Lekcje WHERE (SELECT nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id_przedmiot=Lekcje.przedmiot)=OLD.id;
        --nauczyciel=OLD.id;
        DELETE FROM Nauczyciele_powadzacy WHERE nauczyciel=OLD.id;
 
@@ -278,6 +279,11 @@ RETURNS TRIGGER AS
     DECLARE a varchar;
     b NUMERIC;
     BEGIN
+        if NEW.nauczyciel=(SELECT np.nauczyciel FROM Nauczyciele_powadzacy np JOIN Lekcje ON np.id=przedmiot
+            WHERE Lekcje.id=NEW.lekcja) then raise EXCEPTION 'Nauczyciel nie może zastapić siebie samego';end if;
+
+        delete from zastepstwa WHERE lekcja=NEW.lekcja AND data=NEW.data;
+
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.data::timestamp));
         IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4)
@@ -297,7 +303,7 @@ CREATE OR REPLACE FUNCTION dodaj_klase()
 RETURNS TRIGGER AS
 $$
 BEGIN
-    IF NOT(NEW.klasa ~ '^[1-6][a-z]$') THEN RETURN NULL;END IF;
+    IF NOT(NEW.klasa ~ '^[1-6][a-z]$')AND NOT (NEW.klasa ~ '^[1-6][A-Z]$') THEN RETURN NULL;END IF;
     RETURN NEW;
 end;
 $$
@@ -317,7 +323,7 @@ begin
     return QUERY SELECT (SELECT p.nazwa FROM przedmioty p WHERE p.id=l.przedmiot) AS przedmiot,
     to_char(l.czas, 'HH:MI'), l.dzien, l.sala,
     (SELECT nazwisko FROM Pracownicy
-    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id=l.przedmiot)) AS nauczyciel
+    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id_przedmiot=l.przedmiot)) AS nauczyciel
     FROM Lekcje l WHERE l.klasa=klasaDziecka ORDER BY l.dzien, l.czas;
 
 end;
@@ -340,14 +346,15 @@ language plpgsql;
 
 --INSERTS
 
+
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'Bananowski', 40,  'MAGISTER');
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('C', 'Drozd', 40,  'MAGISTER');
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('E', 'Figowa', 30, 'DOKTOR');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('G', 'Haber', 40,  'BRAK');
-INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'Borówka', 12,  'BRAK');
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('G', 'Haber', 40,  null);
+INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'Borówka', 12,  null);
 
-INSERT INTO Klasy (klasa, wychowawca) VALUES ('1E', 0);
-INSERT INTO Klasy (klasa, wychowawca) VALUES ('4E', 1);
+INSERT INTO Klasy  VALUES (1,'1E', 0);
+INSERT INTO Klasy  VALUES (4,'4E', 1);
 
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (401, '4E', 'A', 'A');
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (402, '4E', 'B', 'B');
@@ -377,13 +384,14 @@ INSERT INTO Sale (nr, liczba_miejsc) VALUES (12, 25);
 INSERT INTO Sale (nr, liczba_miejsc) VALUES (11, 45);
 
 INSERT INTO Przedmioty (id, nazwa) VALUES (0, 'Matematyka');
+INSERT INTO Przedmioty (id, nazwa) VALUES (1, 'Polski');
 INSERT INTO Przedmioty (id, nazwa) VALUES (2, 'Chemia');
 INSERT INTO Przedmioty (id, nazwa) VALUES (3, 'Biologia');
 
-INSERT INTO Nauczyciele_powadzacy VALUES (0,0);
-INSERT INTO Nauczyciele_powadzacy VALUES (0,1);
-INSERT INTO Nauczyciele_powadzacy VALUES (2,2);
-INSERT INTO Nauczyciele_powadzacy VALUES (3,2);
+INSERT INTO Nauczyciele_powadzacy VALUES (0,0,0);
+INSERT INTO Nauczyciele_powadzacy VALUES (1,0,1);
+INSERT INTO Nauczyciele_powadzacy VALUES (2,2,2);
+INSERT INTO Nauczyciele_powadzacy VALUES (3,3,2);
 
 
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 1, '4E', '12:00', 'Poniedziałek');
@@ -397,6 +405,8 @@ INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '9
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '10:00', 'Czwartek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '10:00', 'Piątek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 12, '1E', '10:00', 'Piątek');
+
+
 
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (0, 'sprawdzian', '', '11.05.2020');
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '11.05.2020');
@@ -413,4 +423,9 @@ INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 3, 5.5, '');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 0, '11.05.2020');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 0, '11.05.2020');
 
-INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '05.18.2020');
+INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (1, 3, '18.05.2020');
+INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '18.05.2020');
+
+SELECT * FROM Zastepstwa;
+SELECT * FROM lekcje join Nauczyciele_powadzacy ON Lekcje.przedmiot = Nauczyciele_powadzacy.id;
+SELECT np.nauczyciel,Lekcje.id,Lekcje.dzien,czas FROM Nauczyciele_powadzacy np JOIN Lekcje ON np.id=przedmiot;
