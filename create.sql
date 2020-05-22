@@ -1,3 +1,11 @@
+--GROUPS
+CREATE ROLE Administracja LOGIN INHERIT;
+CREATE ROLE Nauczyciele LOGIN INHERIT;
+CREATE ROLE Uczniowie LOGIN INHERIT;
+
+CREATE USER sekretariat;
+GRANT Administracja TO sekretariat;
+
 --SEQUENCES
 
 CREATE SEQUENCE Lekcje_id_seq MINVALUE 0 START 0;
@@ -146,6 +154,7 @@ create or replace function dodajDziecko()
     declare
        record record;
         dzieci NUMERIC;
+        nazwa varchar;
     begin
         IF NEW.absolwent IS NULL THEN NEW.absolwent='N';END IF;
         IF NEW.absolwent='N' AND NEW.klasa IS NULL THEN RAISE EXCEPTION 'Do której chodzi klasy?';END IF;
@@ -158,12 +167,16 @@ create or replace function dodajDziecko()
             if(record.klasa=NEW.klasa AND dzieci >(SELECT liczba_miejsc FROM sale WHERE sale.nr=record.sala))
                 THEN RAISE EXCEPTION 'Klasa jest pełna';END IF;
          end loop;
+        nazwa=CONCAT('u',cast(NEW.index AS varchar));
+        IF TG_OP='INSERT' THEN EXECUTE('CREATE USER ' || quote_ident(nazwa) || ' PASSWORD ''1234'';');END IF;
+        IF TG_OP='INSERT' THEN EXECUTE('GRANT Uczniowie TO ' || quote_ident(nazwa) || ';') ;END IF;
         return NEW;
     end;
     $$
 LANGUAGE plpgsql;
 
 CREATE TRIGGER "liczbaDzieci" BEFORE INSERT OR UPDATE ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodajDziecko();
+
 
 --------------------------------------------------------------------------------------
 
@@ -192,14 +205,15 @@ CREATE OR REPLACE FUNCTION dodaj_pracownika()
 RETURNS TRIGGER AS
     $$
     DECLARE a RECORD;
-        b INTEGER;
+        nazwa varchar;
     BEGIN
         IF (NEW.id IS NOT NULL) THEN RETURN NEW; END IF;
-        b=-1;
-        FOR a IN SELECT * FROM Pracownicy LOOP
-            IF (a.id>b) THEN b=a.id; END IF;
-            end loop;
-        RETURN ((b+1), NEW.imie, NEW.nazwisko, NEW.godzinyPracy, NEW.tytul);
+        NEW.id=(SELECT COALESCE(MAX(id),-1) FROM pracownicy)+1;
+
+        nazwa=CONCAT('n',cast(NEW.id AS varchar));
+        IF TG_OP='INSERT' THEN EXECUTE('CREATE USER ' || quote_ident(nazwa) || ' PASSWORD ''1234'';') ;END IF;
+        IF TG_OP='INSERT' THEN EXECUTE('GRANT Nauczyciele TO ' || quote_ident(nazwa) || ';') ;END IF;
+        RETURN NEW;
     end;
     $$
 LANGUAGE plpgsql;
@@ -295,6 +309,18 @@ RETURNS TRIGGER AS
     BEGIN
         if NEW.nauczyciel=(SELECT np.nauczyciel FROM Nauczyciele_powadzacy np JOIN Lekcje ON np.id=przedmiot
             WHERE Lekcje.id=NEW.lekcja) then raise EXCEPTION 'Nauczyciel nie może zastapić siebie samego';end if;
+
+        if NEW.nauczyciel IN (SELECT nauczyciel FROM Nauczyciele_powadzacy np JOIN Lekcje l on np.id=l.przedmiot
+            WHERE l.dzien=(SELECT dzien FROM Lekcje l2 WHERE l2.id=NEW.lekcja)
+              AND l.czas=(SELECT czas FROM Lekcje l2 WHERE l2.id=NEW.lekcja)) THEN
+            RAISE EXCEPTION 'Ten nauczyciel prowadzi juz wtedy lekcje';
+        end if;
+
+        if NEW.nauczyciel IN (SELECT nauczyciel FROM Zastepstwa z JOIN Lekcje l on z.lekcja=l.id
+            WHERE l.dzien=(SELECT dzien FROM Lekcje l2 WHERE l2.id=NEW.lekcja)
+              AND l.czas=(SELECT czas FROM Lekcje l2 WHERE l2.id=NEW.lekcja)) THEN
+            RAISE EXCEPTION 'Ten nauczyciel prowadzi juz wtedy zastepstwo';
+        end if;
 
         delete from zastepstwa WHERE lekcja=NEW.lekcja AND data=NEW.data;
 
@@ -404,8 +430,10 @@ INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('E', 'Figow
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('G', 'Haber', 40,  null);
 INSERT INTO Pracownicy (imie, nazwisko, godzinyPracy, tytul) VALUES ('A', 'Borówka', 12,  null);
 
-INSERT INTO Klasy  VALUES (1,'1E', 0);
+
+INSERT INTO Klasy  VALUES (1,'1E', 2);
 INSERT INTO Klasy  VALUES (4,'4E', 1);
+INSERT INTO Klasy  VALUES (2,'2E', 3);
 
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (401, '4E', 'A', 'A');
 INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (402, '4E', 'B', 'B');
@@ -456,6 +484,7 @@ INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '9
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 11, '4E', '10:00', 'Czwartek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '10:00', 'Piątek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (0, 12, '1E', '10:00', 'Piątek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 1, '2E', '10:00', 'Piątek');
 
 
 
@@ -475,14 +504,10 @@ INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 0, '11.05.2020');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 0, '11.05.2020');
 
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (1, 3, '18.05.2020');
-INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '18.05.2020');
 
 INSERT INTO oceny_okresowe VALUES (401,0,3,4);
 INSERT INTO oceny_okresowe VALUES (401,1,4,4);
 INSERT INTO oceny_okresowe VALUES (101,0,4,5,2019);
 INSERT INTO oceny_okresowe VALUES (101,0,5,5);
-
-
-
 
 
