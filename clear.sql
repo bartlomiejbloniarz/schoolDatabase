@@ -1,3 +1,4 @@
+DROP VIEW srednie_ocen;
 DROP FUNCTION if EXISTS terminarzklasy(kl varchar);
 DROP FUNCTION IF EXISTS mojplanlekcji(iddziecka numeric);
 DROP FUNCTION IF EXISTS dodajZastepstwo() CASCADE;
@@ -24,5 +25,6 @@ DROP TABLE if EXISTS Uczniowie;
 DROP TABLE if EXISTS Klasy;
 DROP TABLE if EXISTS Zastepstwa;
 DROP TABLE if EXISTS Pracownicy;
+DROP TABLE if EXISTS oceny_okresowe;
 DROP SEQUENCE IF EXISTS Lekcje_id_seq;
 DROP TYPE if EXISTS TYTUL;

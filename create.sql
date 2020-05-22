@@ -26,9 +26,11 @@ CREATE TABLE Klasy(
 
 CREATE TABLE Uczniowie(
     index INTEGER CONSTRAINT PK_UCZ PRIMARY KEY,
-    klasa CHARACTER(2) NOT NULL REFERENCES Klasy(klasa),
+    klasa CHARACTER(2) REFERENCES Klasy(klasa),
     imie CHARACTER VARYING NOT NULL,
-    nazwisko CHARACTER VARYING NOT NULL
+    nazwisko CHARACTER VARYING NOT NULL,
+    absolwent CHAR(1),
+    CHECK (absolwent='T' OR absolwent='N')
 );
 
 CREATE TABLE Sale(
@@ -84,11 +86,20 @@ CREATE TABLE Terminarz(
 
 CREATE TABLE Zastepstwa(
     lekcja INTEGER REFERENCES Lekcje,
-    nauczyciel INTEGER REFERENCES Pracownicy(id),
+    nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id),
     data DATE,
     PRIMARY KEY (lekcja,data)
 );
-
+CREATE TABLE oceny_okresowe(
+    index INTEGER REFERENCES Uczniowie,
+    przedmiot INTEGER REFERENCES Przedmioty(id),
+    ocena_srodroczna INTEGER,
+    ocena_koncoworoczna INTEGER,
+    CHECK (ocena_srodroczna>0 AND ocena_srodroczna<7),
+    CHECK (ocena_koncoworoczna>0 AND ocena_koncoworoczna<7),
+    rok NUMERIC(4),
+    PRIMARY KEY (index,przedmiot,rok)
+);
 --TRIGGERS
 
 create or replace function ocena_z_lekcji()
@@ -136,6 +147,9 @@ create or replace function dodajDziecko()
        record record;
         dzieci NUMERIC;
     begin
+        IF NEW.absolwent IS NULL THEN NEW.absolwent='N';END IF;
+        IF NEW.absolwent='N' AND NEW.klasa IS NULL THEN RAISE EXCEPTION 'Do której chodzi klasy?';END IF;
+        IF NEW.absolwent='T' AND NEW.klasa IS NOT NULL THEN RAISE EXCEPTION 'Absolwent nie może chodzić do klasy';END IF;
         dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa);
         IF TG_OP='UPDATE' AND OLD.klasa<>NEW.klasa THEN dzieci=dzieci+1;END IF;
         IF TG_OP='INSERT' THEN dzieci=dzieci+1;END IF;
@@ -311,6 +325,37 @@ LANGUAGE plpgsql;
 
 CREATE TRIGGER dodaj_klase BEFORE INSERT OR UPDATE ON Klasy FOR EACH ROW EXECUTE PROCEDURE dodaj_klase();
 
+-----------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION dodaj_ocene_okresowa()
+RETURNS TRIGGER AS
+$$
+BEGIN
+    IF NEW.rok IS NULL THEN NEW.rok=EXTRACT(year FROM current_timestamp);END IF;
+
+    IF TG_OP='INSERT' AND (NEW.index,NEW.przedmiot,NEW.rok) IN (SELECT index,przedmiot,rok FROM oceny_okresowe)
+        AND NEW.ocena_koncoworoczna IS NOT NULL
+    THEN
+        UPDATE oceny_okresowe SET ocena_koncoworoczna=NEW.ocena_koncoworoczna
+        WHERE index=NEW.index AND przedmiot=NEW.przedmiot AND rok=NEW.rok;
+    END IF;
+
+    IF TG_OP='INSERT' AND (NEW.index,NEW.przedmiot,NEW.rok) IN (SELECT index,przedmiot,rok FROM oceny_okresowe)
+        AND NEW.ocena_srodroczna IS NOT NULL
+    THEN
+        UPDATE oceny_okresowe SET ocena_srodroczna=NEW.ocena_srodroczna
+        WHERE index=NEW.index AND przedmiot=NEW.przedmiot AND rok=NEW.rok;
+    END IF;
+
+    IF TG_OP='INSERT' AND (NEW.index,NEW.przedmiot,NEW.rok) IN (SELECT index,przedmiot,rok FROM oceny_okresowe)
+    THEN RETURN NULL;END IF;
+
+    RETURN NEW;
+end;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER dodaj_ocene_okresowa BEFORE INSERT OR UPDATE ON oceny_okresowe FOR EACH ROW EXECUTE PROCEDURE dodaj_ocene_okresowa();
+
 --FUNCTIONS
 create or replace function mojPlanLekcji(idDziecka NUMERIC)
     returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar) as
@@ -342,8 +387,14 @@ RETURNS TABLE (lekcja INTEGER, typ varchar, komentarz varchar, dzien DATE) AS
 language plpgsql;
 
 --VIEWS
+CREATE or replace VIEW "srednie_ocen" AS
+    SELECT u.index,imie,nazwisko,
+           (SELECT p.nazwa FROM przedmioty p WHERE p.id= o.przedmiot) AS "przedmiot",
+           SUM(o.ocena)/COUNT(*) AS "ocena"
+    FROM uczniowie u JOIN oceny o ON u.index=o.index
+    GROUP BY o.przedmiot, u.index;
 
-
+SELECT * FROM srednie_ocen;
 --INSERTS
 
 
@@ -426,6 +477,11 @@ INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 0, '11.05.2020');
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (1, 3, '18.05.2020');
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (0, 0, '18.05.2020');
 
-SELECT * FROM Zastepstwa;
-SELECT * FROM lekcje join Nauczyciele_powadzacy ON Lekcje.przedmiot = Nauczyciele_powadzacy.id;
-SELECT np.nauczyciel,Lekcje.id,Lekcje.dzien,czas FROM Nauczyciele_powadzacy np JOIN Lekcje ON np.id=przedmiot;
+INSERT INTO oceny_okresowe VALUES (401,0,3,4);
+INSERT INTO oceny_okresowe VALUES (401,1,4,4);
+INSERT INTO oceny_okresowe VALUES (101,0,4,5,2019);
+INSERT INTO oceny_okresowe VALUES (101,0,5,5);
+
+
+
+
