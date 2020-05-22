@@ -12,6 +12,8 @@ DROP FUNCTION IF EXISTS dodajlekcje() CASCADE;
 DROP FUNCTION IF EXISTS dodajdziecko() CASCADE;
 DROP FUNCTION IF EXISTS nieobecnosc() CASCADE;
 DROP FUNCTION IF EXISTS ocena_z_lekcji() CASCADE;
+DROP FUNCTION IF EXISTS dodaj_ocene_okresowa() CASCADE;
+DROP FUNCTION IF EXISTS dodaj_klase() CASCADE;
 DROP TABLE if EXISTS Nauczyciele_prowadzacy;
 DROP TABLE if EXISTS zastepstwa;
 DROP TABLE if EXISTS Terminarz;

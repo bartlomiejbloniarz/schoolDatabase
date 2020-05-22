@@ -485,3 +485,4 @@ INSERT INTO oceny_okresowe VALUES (101,0,5,5);
 
 
 
+
