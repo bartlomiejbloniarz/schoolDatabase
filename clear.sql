@@ -26,14 +26,16 @@ SELECT usun_uzytkownikow();
 
 
 DROP VIEW if exists srednie_ocen;
-DROP FUNCTION if EXISTS terminarzklasy(kl varchar);
-DROP FUNCTION IF EXISTS mojplanlekcji(iddziecka numeric);
+DROP FUNCTION if EXISTS dodaj_przedmiot() CASCADE;
+DROP FUNCTION if EXISTS dodaj_nauczyciela_prowadzacego() CASCADE;
+DROP FUNCTION if EXISTS terminarzklasy(kl varchar) CASCADE;
+DROP FUNCTION IF EXISTS mojplanlekcji(iddziecka numeric) CASCADE;
 DROP FUNCTION IF EXISTS dodajZastepstwo() CASCADE;
 DROP FUNCTION IF EXISTS dodajnieobecnosc() CASCADE;
 DROP FUNCTION IF EXISTS dodajterminarz() CASCADE;
-DROP FUNCTION IF EXISTS wiecej_niz_zero(a numeric);
 DROP FUNCTION IF EXISTS zamien_nauczyciela() CASCADE;
 DROP FUNCTION IF EXISTS usun_nauczyciela() CASCADE;
+DROP FUNCTION IF EXISTS usun_ucznia() CASCADE;
 DROP FUNCTION IF EXISTS dodaj_pracownika() CASCADE;
 DROP FUNCTION IF EXISTS dodajlekcje() CASCADE;
 DROP FUNCTION IF EXISTS dodajdziecko() CASCADE;
