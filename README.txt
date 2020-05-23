@@ -44,38 +44,57 @@ Informacje o lekcjach, a co za tym idzie również zastępstwach, formach sprawd
 Dane tabel jak sale, nauczyciele_prowadzacy,klasy mogą być również zmieniane okresowo, w rzeczywistości jednak bardzo częstym jest by zostawały one w prawie niezmienionym stanie w kolejnych latach. 
 Oczywiście wszystkie dane można zmienić w dowolnym momecie, jednak odpowiednio zmieniając skorelowane dane w innych tabelach. Przy usuwaniu nauczyciela automatycznie usunięte zostaną lekcje które prowadzi oraz związane z nim krotki tabeli nauczyciele_prowadzacy.
 
+Wprowadziliśmy liczne ograniczenia oraz triggery mające na celu uniemożliwienie wprowadzania lub automatyczną korektę danych potencjalnie powodujących nielogiczny, czy też niepoprawny stan bazy. Przykładowdo: 
+pola id i index są wypełniane automatycznie, 
+nauczyciel nie może zastępować samego siebie, nie może też prowdzić jednocześnie dwóch lekcji(włączając w to prowadzone zastępstwa),
+uczeń nie może dostać oceny ani nieobecności z lekcji na którą nie uczęszcza,
+dzieci nie może być w klasie więcej, niż miejsc w salach w których mają lekcje,
+dodane formy sprawdzania wiedzy, zastępstwa, nieobecności,  które to posiadają datę, sprawdzane są na spójność dotyczącą wpisanej daty oraz dnia tygodnia w którym odbywa się związana z nimi lekcja(dla ocen datą jest data wprowadzenia, która  nie jest od tego zależna. Datę przeprowadzenia można umieścić np. w opisie, jeśli jest taka potrzeba),
+oceny okresowe przy dodawaniu są przechwytywane, na wypadek, gdyby krotka danego ucznia i przedmiotu już istniała. Wówczas jest ona aktualizowana, by zachować porządek danych. 
 
 
+Dla dodawanych uczniowiów i nauczycieli automatycznie zostaje utworzone konto pozwalające na dostęp do pewnych, przeznaczonych dla nich danych(oczywiście po upewnieniu się, że samo dodanie do bazy nie powoduje błędu). Usiwając osobę z bazy danych konto to zostaje wycofane. 
 
 --------------------------------------------------------------------------------------------
 
 APLIKACJA:
 create.sql należy uruchomić w bazie danych o nazwie "school" i schemacie o nazwie "public". 
 
+Aplikacja celowo nie umożliwia modyfikowania tabeli Sale-jest to coś na tyle niezmiennego, że dostęp do tego wydaje nam się logiczny jedynie z poziomu bazy danych.
+Nieobecności dostępne są poprzez menu kontekstowe konkretnego ucznia.
 
 
+
+
+------------------------------------------------------------------------------------------------------------
 Wkład pracy:
 
 Bartłomiej Błoniarz: 
 Stworzone tabele:
 Nieobecnosci, Oceny, Termiarz, Przedmioty. Oraz korekta pozostałych tabel.
+
 Stworzone triggery(oraz konieczne do nich funkcje):
-dodaj_pracownika, usunNauczyciela, dodajTerminarz, dodajNieobecnosci, dodajZastepstwo
+ dodaj_terminarz, dodaj_nieobecnosc, dodaj_zastepstwo
+
 Stworzone funkcje:
 terminarzKlasy
+
 Przykładowe dane
 Clear.sql
-
+------------------------------------------------------------------------------------------------------
 Inka Sokołowska:
 Stworzone tabele:
-Lekcje, Sale, Uczniowie, Klasy, Pracownicy, Zastepstwa.
+Lekcje, Sale, Uczniowie, Klasy, Pracownicy, Zastepstwa, Oceny_okresowe, Nauczyciele_prowadzacy.
+
 Stworzone triggery(oraz konieczne do nich funkcje): 
-liczbaDzieci, jednaLekcjaNaRaz, usunSale, zamienNauczyciela, nieobecnosc, ocena_z_lekcji
+dodaj_pracownika, dodaj_dziecko, dodaj_lekcje, zamien_nauczyciela, nieobecnosc, ocena_z_lekcji, usun_ucznia, 
+usun_nauczyciela, dodaj_klase, dodaj_nauczyciela_prowadzacego, dodaj_ocene_okresowa, dodaj_przedmiot
+
 Stworzone funkcje:
-mojPlanLekcji.
+plan_lekcji,terminarzKlasy, usun_uzytkownikow
+
+Stworzone widoki: 
+srednie_ocen
+
 Readme
-
-Plany:
-dopracowanie wyświetlania planu lekcji
-
 

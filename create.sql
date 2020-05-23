@@ -7,9 +7,6 @@ CREATE USER sekretariat PASSWORD 'sekretariat';
 ALTER USER sekretariat WITH SUPERUSER;
 GRANT Administracja TO sekretariat;
 
---SEQUENCES
-
-CREATE SEQUENCE Lekcje_id_seq MINVALUE 0 START 0;
 
 --ENUMS
 
@@ -48,9 +45,9 @@ CREATE TABLE Sale(
 
 CREATE TABLE Przedmioty(
     id INTEGER PRIMARY KEY,
-    nazwa CHARACTER VARYING NOT NULL
+    nazwa CHARACTER VARYING NOT NULL UNIQUE
 );
-CREATE TABLE Nauczyciele_powadzacy(
+CREATE TABLE Nauczyciele_prowadzacy(
     id INTEGER PRIMARY KEY,
     id_przedmiot INTEGER references Przedmioty(id),
     nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id)
@@ -58,8 +55,8 @@ CREATE TABLE Nauczyciele_powadzacy(
 );
 
 CREATE TABLE Lekcje(
-    id INTEGER PRIMARY KEY DEFAULT nextval('Lekcje_id_seq'),
-    przedmiot INTEGER NOT NULL REFERENCES Nauczyciele_powadzacy(id),
+    id INTEGER PRIMARY KEY,
+    przedmiot INTEGER NOT NULL REFERENCES Nauczyciele_prowadzacy(id),
     sala INTEGER NOT NULL REFERENCES Sale(nr),
     klasa CHARACTER VARYING NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
@@ -119,7 +116,7 @@ begin
         klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
 
         IF (SELECT coalesce(COUNT(*),0)FROM lekcje l WHERE
-           (SELECT id_przedmiot FROM nauczyciele_powadzacy WHERE id=l.przedmiot)=NEW.przedmiot AND
+           (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE id=l.przedmiot)=NEW.przedmiot AND
         l.klasa=klasaUcznia)=0 THEN RETURN NULL; END IF;
 
         if NEW.data IS NULL THEN NEW.data=current_timestamp;END IF;
@@ -148,7 +145,7 @@ LANGUAGE plpgsql;
 CREATE TRIGGER "nieobecnosc" BEFORE INSERT OR UPDATE ON Nieobecnosci FOR EACH ROW EXECUTE PROCEDURE nieobecnosc();
 ---------------------------------------------------------------------------------------
 
-create or replace function dodajDziecko()
+create or replace function dodaj_dziecko()
     returns TRIGGER AS
     $$
     declare
@@ -156,12 +153,15 @@ create or replace function dodajDziecko()
         dzieci NUMERIC;
         nazwa varchar;
     begin
+        IF TG_OP='INSERT' AND NEW.index IS NOT NULL AND NEW.index IN (SELECT index FROM uczniowie)
+            THEN RAISE EXCEPTION 'Index zajęty';END IF;
         IF NEW.imie IS NULL OR NEW.nazwisko IS NULL THEN RAISE EXCEPTION 'Brak imienia lub nazwiska';END IF;
         IF TG_OP='INSERT' AND NEW.index IS NULL THEN NEW.index=(SELECT COALESCE(MAX(index),0) FROM uczniowie)+1;END IF;
         IF TG_OP='UPDATE' THEN NEW.index=OLD.index;END IF;
         IF NEW.absolwent IS NULL THEN NEW.absolwent='N';END IF;
         IF NEW.absolwent='N' AND NEW.klasa IS NULL THEN RAISE EXCEPTION 'Do której chodzi klasy?';END IF;
         IF NEW.absolwent='T' AND NEW.klasa IS NOT NULL THEN RAISE EXCEPTION 'Absolwent nie może chodzić do klasy';END IF;
+
         dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa);
         IF TG_OP='UPDATE' AND OLD.klasa<>NEW.klasa THEN dzieci=dzieci+1;END IF;
         IF TG_OP='INSERT' THEN dzieci=dzieci+1;END IF;
@@ -178,12 +178,12 @@ create or replace function dodajDziecko()
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "liczbaDzieci" BEFORE INSERT OR UPDATE ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodajDziecko();
+CREATE TRIGGER dodaj_dziecko BEFORE INSERT OR UPDATE ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodaj_dziecko();
 
 
 --------------------------------------------------------------------------------------
 
-create or replace function dodajLekcje()
+create or replace function dodaj_lekcje()
     returns TRIGGER AS
     $$
     declare
@@ -196,12 +196,14 @@ create or replace function dodajLekcje()
                 IF TG_OP='UPDATE' AND record IS NOT DISTINCT FROM OLD THEN CONTINUE;END IF;
                 RAISE EXCEPTION 'Klasa ma już wtedy lekcje ';END IF;
          end loop;
+        IF (SELECT COUNT(*) FROM uczniowie WHERE klasa=NEW.klasa)>(SELECT liczba_miejsc FROM Sale WHERE Sale.nr=NEW.sala)
+        THEN RAISE EXCEPTION 'Sala nie pomieści tylu osób';END IF;
         return NEW;
     end;
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER "jednaLekcjaNaRaz" BEFORE INSERT OR UPDATE ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodajLekcje();
+CREATE TRIGGER dodaj_lekcje BEFORE INSERT OR UPDATE ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodaj_lekcje();
 
 ---------------------------------------------------------------------------------------
 
@@ -233,10 +235,10 @@ RETURNS TRIGGER AS
         nazwa varchar;
     BEGIN
     IF(SELECT coalesce(COUNT(*),0) FROM Klasy WHERE wychowawca=OLD.id)>0 THEN RAISE EXCEPTION 'Znajdz zastepstwo na wychowawstwo';END IF;
-    FOR a IN SELECT * FROM nauczyciele_powadzacy WHERE nauczyciel=OLD.id LOOP
+    FOR a IN SELECT * FROM nauczyciele_prowadzacy WHERE nauczyciel=OLD.id LOOP
         DELETE FROM Lekcje WHERE przedmiot=a.id;
         END LOOP;
-    DELETE FROM nauczyciele_powadzacy WHERE nauczyciel=OLD.id;
+    DELETE FROM nauczyciele_prowadzacy WHERE nauczyciel=OLD.id;
     nazwa=CONCAT('n',cast(OLD.id AS varchar));
     EXECUTE('DROP USER ' || quote_ident(nazwa) || ';') ;
     RETURN OLD;
@@ -279,7 +281,7 @@ CREATE TRIGGER zamienNauczyciela BEFORE UPDATE ON Pracownicy FOR EACH ROW EXECUT
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION dodajTerminarz()
+CREATE OR REPLACE FUNCTION dodaj_terminarz()
 RETURNS TRIGGER AS
     $$
     DECLARE a varchar;
@@ -295,11 +297,11 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER dodajTerminarz BEFORE INSERT OR UPDATE ON Terminarz FOR EACH ROW EXECUTE PROCEDURE dodajTerminarz();
+CREATE TRIGGER dodaj_terminarz BEFORE INSERT OR UPDATE ON Terminarz FOR EACH ROW EXECUTE PROCEDURE dodaj_terminarz();
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION dodajNieobecnosc()
+CREATE OR REPLACE FUNCTION dodaj_nieobecnosc()
 RETURNS TRIGGER AS
     $$
     DECLARE a varchar;
@@ -315,20 +317,21 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER dodajNieobecnosc BEFORE INSERT OR UPDATE ON nieobecnosci FOR EACH ROW EXECUTE PROCEDURE dodajNieobecnosc();
+CREATE TRIGGER dodaj_nieobecnosc BEFORE INSERT OR UPDATE ON nieobecnosci
+    FOR EACH ROW EXECUTE PROCEDURE dodaj_nieobecnosc();
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION dodajZastepstwo()
+CREATE OR REPLACE FUNCTION dodaj_zastepstwo()
 RETURNS TRIGGER AS
     $$
     DECLARE a varchar;
     b NUMERIC;
     BEGIN
-        if NEW.nauczyciel=(SELECT np.nauczyciel FROM Nauczyciele_powadzacy np JOIN Lekcje ON np.id=przedmiot
+        if NEW.nauczyciel=(SELECT np.nauczyciel FROM Nauczyciele_prowadzacy np JOIN Lekcje ON np.id=przedmiot
             WHERE Lekcje.id=NEW.lekcja) then raise EXCEPTION 'Nauczyciel nie może zastapić siebie samego';end if;
 
-        if NEW.nauczyciel IN (SELECT nauczyciel FROM Nauczyciele_powadzacy np JOIN Lekcje l on np.id=l.przedmiot
+        if NEW.nauczyciel IN (SELECT nauczyciel FROM Nauczyciele_prowadzacy np JOIN Lekcje l on np.id=l.przedmiot
             WHERE l.dzien=(SELECT dzien FROM Lekcje l2 WHERE l2.id=NEW.lekcja)
               AND l.czas=(SELECT czas FROM Lekcje l2 WHERE l2.id=NEW.lekcja)) THEN
             RAISE EXCEPTION 'Ten nauczyciel prowadzi juz wtedy lekcje';
@@ -352,7 +355,7 @@ RETURNS TRIGGER AS
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER dodajZastepstwo BEFORE INSERT OR UPDATE ON zastepstwa FOR EACH ROW EXECUTE PROCEDURE dodajZastepstwo();
+CREATE TRIGGER dodaj_zastepstwo BEFORE INSERT OR UPDATE ON zastepstwa FOR EACH ROW EXECUTE PROCEDURE dodaj_zastepstwo();
 
 ----------------------------------------------------------------------------------------------------------
 
@@ -385,14 +388,14 @@ CREATE OR REPLACE FUNCTION dodaj_nauczyciela_prowadzacego()
 RETURNS TRIGGER AS
 $$
 BEGIN
-    IF TG_OP='INSERT' THEN NEW.id=(SELECT COALESCE(MAX(id),0) FROM nauczyciele_powadzacy)+1;END IF;
+    IF TG_OP='INSERT' THEN NEW.id=(SELECT COALESCE(MAX(id),0) FROM nauczyciele_prowadzacy)+1;END IF;
         IF TG_OP='UPDATE' THEN NEW.id=OLD.id;END IF;
     RETURN NEW;
 end;
 $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER dodaj_nauczyciela_prowadzacego BEFORE INSERT OR UPDATE ON nauczyciele_powadzacy
+CREATE TRIGGER dodaj_nauczyciela_prowadzacego BEFORE INSERT OR UPDATE ON nauczyciele_prowadzacy
     FOR EACH ROW EXECUTE PROCEDURE dodaj_nauczyciela_prowadzacego();
 
 -----------------------------------------------------------------------------------------------------------
@@ -427,33 +430,37 @@ LANGUAGE plpgsql;
 CREATE TRIGGER dodaj_ocene_okresowa BEFORE INSERT OR UPDATE ON oceny_okresowe FOR EACH ROW EXECUTE PROCEDURE dodaj_ocene_okresowa();
 
 --FUNCTIONS
-create or replace function mojPlanLekcji(idDziecka NUMERIC)
+create or replace function plan_lekcji(kl varchar)
     returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar) as
 $$
-declare
-    klasaDziecka VARCHAR;
 begin
-    klasaDziecka=(SELECT u.klasa FROM Uczniowie u WHERE u.index=idDziecka);
-
-    return QUERY SELECT (SELECT p.nazwa FROM przedmioty p JOIN nauczyciele_powadzacy np ON p.id=np.id_przedmiot
+    IF kl NOT IN (SELECT klasa FROM klasy) THEN RAISE EXCEPTION 'Nie ma takiej klasy';END IF;
+    return QUERY SELECT (SELECT p.nazwa FROM przedmioty p JOIN nauczyciele_prowadzacy np ON p.id=np.id_przedmiot
                        WHERE np.id=l.przedmiot) AS przedmiot,
     to_char(l.czas, 'HH:MI'), l.dzien, l.sala,
     (SELECT nazwisko FROM Pracownicy
-    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_powadzacy p WHERE p.id=l.przedmiot)) AS nauczyciel
-    FROM Lekcje l WHERE l.klasa=klasaDziecka ORDER BY l.dzien, l.czas;
+    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_prowadzacy p WHERE p.id=l.przedmiot)) AS nauczyciel
+    FROM Lekcje l WHERE l.klasa=kl ORDER BY l.dzien, l.czas;
 
 end;
 $$
 language plpgsql;
-
+create or replace function plan_lekcji_ucznia(indexUcznia integer)
+returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar) as
+$$
+begin
+    RETURN QUERY SELECT * FROM plan_Lekcji((SELECT klasa FROM uczniowie u WHERE u.index=indexUcznia));
+end;
+$$
+language plpgsql;
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION terminarzKlasy(kl varchar(2))
-RETURNS TABLE (lekcja VARCHAR, dzien DATE, typ varchar, komentarz varchar) AS
+CREATE OR REPLACE FUNCTION terminarz_klasy(kl varchar(2))
+RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ varchar, komentarz varchar) AS
     $$
     BEGIN
-        RETURN QUERY SELECT
-        (SELECT nazwa FROM przedmioty JOIN nauczyciele_powadzacy np ON Przedmioty.id = np.id_przedmiot
+        RETURN QUERY SELECT t.lekcja,
+        (SELECT nazwa FROM przedmioty JOIN nauczyciele_prowadzacy np ON Przedmioty.id = np.id_przedmiot
             WHERE np.id=l.przedmiot)
         ,t.dzien,t.typ,t.komentarz FROM terminarz t LEFT JOIN lekcje l ON l.id=t.lekcja
         WHERE l.klasa=kl;
@@ -516,10 +523,10 @@ INSERT INTO Przedmioty (id, nazwa) VALUES (2, 'Polski');
 INSERT INTO Przedmioty (id, nazwa) VALUES (3, 'Chemia');
 INSERT INTO Przedmioty (id, nazwa) VALUES (4, 'Biologia');
 
-INSERT INTO Nauczyciele_powadzacy VALUES (0,1,1);
-INSERT INTO Nauczyciele_powadzacy VALUES (1,4,1);
-INSERT INTO Nauczyciele_powadzacy VALUES (2,2,2);
-INSERT INTO Nauczyciele_powadzacy VALUES (3,3,2);
+INSERT INTO Nauczyciele_prowadzacy VALUES (0,1,1);
+INSERT INTO Nauczyciele_prowadzacy VALUES (1,4,1);
+INSERT INTO Nauczyciele_prowadzacy VALUES (2,2,2);
+INSERT INTO Nauczyciele_prowadzacy VALUES (3,3,2);
 
 
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 1, '4E', '12:00', 'Poniedziałek');
@@ -532,21 +539,21 @@ INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, '4E', '11
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '9:00', 'Czwartek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '10:00', 'Czwartek');
 INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 11, '4E', '10:00', 'Piątek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 12, '1E', '10:00', 'Piątek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (3, 1, '2E', '10:00', 'Piątek');
 
 
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '11.05.2020');
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '18.05.2020');
 
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 0, 5, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (402, 0, 5, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (403, 1, 5, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (404, 0, 4, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (101, 2, 5, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (102, 0, 3, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (103, 0, 3.5, '');
-INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 3, 5.5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 1, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (402, 1, 3, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (403, 2, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (404, 4, 4, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (101, 4, 5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (102, 4, 3, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (103, 4, 3.5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 2, 5.5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (105, 1, 5.5, '');
+INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (105, 1, 5.5, '');
 
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 1, '11.05.2020');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 1, '11.05.2020');
@@ -558,4 +565,11 @@ INSERT INTO oceny_okresowe VALUES (401,2,4,4);
 INSERT INTO oceny_okresowe VALUES (101,1,4,5,2019);
 INSERT INTO oceny_okresowe VALUES (101,1,5,5);
 
+SELECT id, id_przedmiot,(SELECT nazwa FROM przedmioty p WHERE p.id=np.id_przedmiot),np.nauczyciel,
+       (SELECT nazwisko FROM pracownicy p WHERE p.id=np.nauczyciel) AS nazwisko
+        FROM nauczyciele_prowadzacy np;
 
+DELETE FROM Oceny WHERE ctid =(SELECT max(ctid) FROM Oceny WHERE index=105
+                         AND przedmiot=(SELECT id FROM Przedmioty WHERE nazwa='Matematyka') AND ocena=5.5
+                         AND komentarz='' AND data='2020-05-23' );
+SELECT * FROM oceny;
