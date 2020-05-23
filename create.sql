@@ -3,7 +3,8 @@ CREATE ROLE Administracja LOGIN INHERIT;
 CREATE ROLE Nauczyciele LOGIN INHERIT;
 CREATE ROLE Uczniowie LOGIN INHERIT;
 
-CREATE USER sekretariat;
+CREATE USER sekretariat PASSWORD 'sekretariat';
+ALTER USER sekretariat WITH SUPERUSER;
 GRANT Administracja TO sekretariat;
 
 --SEQUENCES

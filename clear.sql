@@ -16,7 +16,7 @@ create or replace function usun_uzytkownikow()
         EXECUTE('DROP USER ' || quote_ident(nazwa) || ';') ;
         end loop;
 
-        DROP USER sekretariat;
+       DROP USER sekretariat;
 
     end;
     $$
@@ -62,4 +62,3 @@ DROP TYPE if EXISTS TYTUL;
 DROP ROLE Administracja;
 DROP ROLE Nauczyciele;
 DROP ROLE Uczniowie;
-
