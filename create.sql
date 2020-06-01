@@ -431,7 +431,7 @@ CREATE TRIGGER dodaj_ocene_okresowa BEFORE INSERT OR UPDATE ON oceny_okresowe FO
 
 --FUNCTIONS
 create or replace function plan_lekcji(kl varchar)
-    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar) as
+    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
 $$
 begin
     IF kl NOT IN (SELECT klasa FROM klasy) THEN RAISE EXCEPTION 'Nie ma takiej klasy';END IF;
@@ -439,7 +439,7 @@ begin
                        WHERE np.id=l.przedmiot) AS przedmiot,
     to_char(l.czas, 'HH:MI'), l.dzien, l.sala,
     (SELECT nazwisko FROM Pracownicy
-    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_prowadzacy p WHERE p.id=l.przedmiot)) AS nauczyciel
+    WHERE id=(SELECT p.nauczyciel FROM Nauczyciele_prowadzacy p WHERE p.id=l.przedmiot)) AS nauczyciel,l.id
     FROM Lekcje l WHERE l.klasa=kl ORDER BY l.dzien, l.czas;
 
 end;
