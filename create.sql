@@ -3,10 +3,10 @@ CREATE ROLE Administracja LOGIN INHERIT;
 CREATE ROLE Nauczyciele LOGIN INHERIT;
 CREATE ROLE Uczniowie LOGIN INHERIT;
 
+
 CREATE USER sekretariat PASSWORD 'sekretariat';
 ALTER USER sekretariat WITH SUPERUSER;
 GRANT Administracja TO sekretariat;
-
 
 --ENUMS
 
@@ -453,6 +453,17 @@ begin
 end;
 $$
 language plpgsql;
+
+create or replace function plan_lekcji_nauczyciela(idn int)
+    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,klasa varchar(2)) as
+$$
+begin
+    IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
+    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, l.klasa FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
+        l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn);
+end;
+$$
+language plpgsql;
 -----------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION terminarz_klasy(kl varchar(2))
@@ -544,6 +555,7 @@ INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 11, '4E', '1
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '11.05.2020');
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '18.05.2020');
 
+
 INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 1, 5, '');
 INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (402, 1, 3, '');
 INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (403, 2, 5, '');
@@ -565,11 +577,10 @@ INSERT INTO oceny_okresowe VALUES (401,2,4,4);
 INSERT INTO oceny_okresowe VALUES (101,1,4,5,2019);
 INSERT INTO oceny_okresowe VALUES (101,1,5,5);
 
-SELECT id, id_przedmiot,(SELECT nazwa FROM przedmioty p WHERE p.id=np.id_przedmiot),np.nauczyciel,
-       (SELECT nazwisko FROM pracownicy p WHERE p.id=np.nauczyciel) AS nazwisko
-        FROM nauczyciele_prowadzacy np;
+--GRANTS
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO Nauczyciele;
+GRANT INSERT ON ALL TABLES IN SCHEMA public TO Nauczyciele;
+GRANT UPDATE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
+GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
-DELETE FROM Oceny WHERE ctid =(SELECT max(ctid) FROM Oceny WHERE index=105
-                         AND przedmiot=(SELECT id FROM Przedmioty WHERE nazwa='Matematyka') AND ocena=5.5
-                         AND komentarz='' AND data='2020-05-23' );
-SELECT * FROM oceny;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
