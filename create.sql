@@ -511,6 +511,7 @@ RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ varchar, koment
 language plpgsql;
 
 --VIEWS
+
 CREATE or replace VIEW "srednie_ocen" AS
     SELECT u.index,imie,nazwisko,
            (SELECT p.nazwa FROM przedmioty p WHERE p.id= o.przedmiot) AS "przedmiot",

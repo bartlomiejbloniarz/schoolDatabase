@@ -67,6 +67,14 @@ Każda tabela posiada własny zestaw akcji jakie można wykonać na jej krotkach
 Pola które mogą mieć wartość null mozna na takie zmienić(jeśli były wypełnione) wpisująć "BRAK" w pole wypełniania.
 
 
+Przykładowe dane: 
+logowanie użytkowniekiem który ma najwięcej praw dostępu(wszystkie które przewidzieliśmy dla aplikacji): login: sekretariat hasło: sekretariat
+logowanie przykładownym nauczycielem: login: n1 haslo:1234
+Nauczyciele mają ograniczone prawa dostępu, każdy ma dostęp do uczniów których uczy(i ich ocen okresowych i ich średnich ocen), swojego planu lekcji(choć może zobaczyć też plan lekcji klas), swojego terminarza, swoich zastępstw(tych, które on prowadzi), wprowadzonych przez siebie ocen, klas które uczy oraz przedmiotów które prowadzi . 
+Przykładowa klasa: 4
+Przykładowy uczeń: 401
+Przykładowy nauczyciel: 1
+
 
 
 
@@ -85,6 +93,9 @@ terminarzKlasy
 
 Przykładowe dane
 Clear.sql
+
+Kwestia aplikacji:
+szkielet projektu, niektóre funkcjonalności. Możliwość logowania się przez różne typy użytkowników w inny sposób. 
 ------------------------------------------------------------------------------------------------------
 Inka Sokołowska:
 Stworzone tabele:
@@ -102,3 +113,5 @@ srednie_ocen
 
 Readme
 
+Kwestia aplikacji:
+funkcjonalności jak dodawanie, usuwanie, zmienianie. 
