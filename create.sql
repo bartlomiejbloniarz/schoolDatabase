@@ -51,7 +51,6 @@ CREATE TABLE Nauczyciele_prowadzacy(
     id INTEGER PRIMARY KEY,
     id_przedmiot INTEGER references Przedmioty(id),
     nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id)
-    --PRIMARY KEY (id_przedmiot,nauczyciel)
 );
 
 CREATE TABLE Lekcje(
@@ -90,10 +89,10 @@ CREATE TABLE Terminarz(
 );
 
 CREATE TABLE Zastepstwa(
-    lekcja INTEGER REFERENCES Lekcje,
+    lekcja INTEGER NOT NULL REFERENCES Lekcje,
     nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id),
     data DATE,
-    PRIMARY KEY (lekcja,data)
+   PRIMARY KEY (lekcja,data)
 );
 CREATE TABLE oceny_okresowe(
     index INTEGER REFERENCES Uczniowie,
@@ -155,12 +154,14 @@ create or replace function dodaj_dziecko()
     begin
         IF TG_OP='INSERT' AND NEW.index IS NOT NULL AND NEW.index IN (SELECT index FROM uczniowie)
             THEN RAISE EXCEPTION 'Index zajęty';END IF;
-        IF NEW.imie IS NULL OR NEW.nazwisko IS NULL THEN RAISE EXCEPTION 'Brak imienia lub nazwiska';END IF;
+        IF TG_OP='INSERT' AND NEW.imie IS NULL OR NEW.nazwisko IS NULL THEN RAISE EXCEPTION 'Brak imienia lub nazwiska';END IF;
         IF TG_OP='INSERT' AND NEW.index IS NULL THEN NEW.index=(SELECT COALESCE(MAX(index),0) FROM uczniowie)+1;END IF;
         IF TG_OP='UPDATE' THEN NEW.index=OLD.index;END IF;
-        IF NEW.absolwent IS NULL THEN NEW.absolwent='N';END IF;
-        IF NEW.absolwent='N' AND NEW.klasa IS NULL THEN RAISE EXCEPTION 'Do której chodzi klasy?';END IF;
-        IF NEW.absolwent='T' AND NEW.klasa IS NOT NULL THEN RAISE EXCEPTION 'Absolwent nie może chodzić do klasy';END IF;
+        IF TG_OP='INSERT' AND NEW.absolwent IS NULL THEN NEW.absolwent='N';END IF;
+        --IF NEW.absolwent='N' AND NEW.klasa IS NULL THEN RAISE EXCEPTION 'Do której chodzi klasy?';END IF;
+        --to robi inny trigger
+        --IF NEW.absolwent='T' THEN NEW.klasa=null;END IF;
+        --AND NEW.klasa IS NOT NULL THEN RAISE EXCEPTION 'Absolwent nie może chodzić do klasy';END IF;
 
         dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa);
         IF TG_OP='UPDATE' AND OLD.klasa<>NEW.klasa THEN dzieci=dzieci+1;END IF;
@@ -179,8 +180,19 @@ create or replace function dodaj_dziecko()
 LANGUAGE plpgsql;
 
 CREATE TRIGGER dodaj_dziecko BEFORE INSERT OR UPDATE ON Uczniowie FOR EACH ROW EXECUTE PROCEDURE dodaj_dziecko();
+-------------------------------------------------------------------------------------
+create or replace function czy_dziecko_ma_klase()
+RETURNS trigger AS $$
+BEGIN
+    IF TG_OP='INSERT' AND NEW.absolwent='N' AND NEW.klasa IS NULL THEN RAISE EXCEPTION 'Do której chodzi klasy w takim razie?';END IF;
+    IF TG_OP='UPDATE' AND NEW.absolwent='N' AND (OLD.klasa IS null AND NEW.klasa IS NULL) THEN RAISE EXCEPTION 'To do której chodzi klasy?';END IF;
+   -- IF NEW.absolwent='T' AND NEW.klasa IS NOT NULL THEN RAISE EXCEPTION 'Absolwent nie może chodzić do klasy';END IF;
 
-
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE CONSTRAINT TRIGGER czy_dziecko_ma_klase AFTER INSERT OR UPDATE ON Uczniowie INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE PROCEDURE czy_dziecko_ma_klase();
 --------------------------------------------------------------------------------------
 
 create or replace function dodaj_lekcje()
@@ -287,6 +299,7 @@ RETURNS TRIGGER AS
     DECLARE a varchar;
     b NUMERIC;
     BEGIN
+        if NEW.komentarz is null THEN NEW.komentarz='';END IF;
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.dzien::timestamp));
         IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3)
@@ -340,22 +353,27 @@ RETURNS TRIGGER AS
         if NEW.nauczyciel IN (SELECT nauczyciel FROM Zastepstwa z JOIN Lekcje l on z.lekcja=l.id
             WHERE l.dzien=(SELECT dzien FROM Lekcje l2 WHERE l2.id=NEW.lekcja)
               AND l.czas=(SELECT czas FROM Lekcje l2 WHERE l2.id=NEW.lekcja)
-            AND NEW.data=z.data) THEN
+            AND NEW.data=z.data AND NEW.ctid<>z.ctid) THEN
             RAISE EXCEPTION 'Ten nauczyciel prowadzi juz wtedy zastepstwo';
         end if;
 
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.data::timestamp));
-        IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4)
-               OR (a='Piątek' AND b=5)) THEN RETURN NEW;
-        ELSE RAISE EXCEPTION 'Błędna data';
+        IF ((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3) OR (a='Czwartek' AND b=4)
+               OR (a='Piątek' AND b=5))=false THEN RAISE EXCEPTION 'Błędna data';
         END IF;
 
+        IF (NEW.lekcja,NEW.data) IN (SELECT lekcja,data FROM Zastepstwa z WHERE z.ctid<>NEW.ctid) THEN
+            RAISE EXCEPTION 'Blad klucza podstawowego-lekcja,data';
+        END IF;
+
+        RETURN NEW;
     end;
     $$
 LANGUAGE plpgsql;
 
-CREATE TRIGGER dodaj_zastepstwo BEFORE INSERT OR UPDATE ON zastepstwa FOR EACH ROW EXECUTE PROCEDURE dodaj_zastepstwo();
+CREATE CONSTRAINT TRIGGER dodaj_zastepstwo AFTER INSERT OR UPDATE ON zastepstwa INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE PROCEDURE dodaj_zastepstwo();
 
 ----------------------------------------------------------------------------------------------------------
 
@@ -370,6 +388,19 @@ $$
 LANGUAGE plpgsql;
 
 CREATE TRIGGER dodaj_klase BEFORE INSERT OR UPDATE ON Klasy FOR EACH ROW EXECUTE PROCEDURE dodaj_klase();
+----------------------------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION dodaj_ocene()
+RETURNS TRIGGER AS
+$$
+BEGIN
+    if NEW.komentarz IS NULL THEN NEW.komentarz='';END IF;
+    RETURN NEW;
+end;
+$$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER dodaj_ocene BEFORE INSERT OR UPDATE ON Oceny FOR EACH ROW EXECUTE PROCEDURE dodaj_ocene();
 ----------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION dodaj_przedmiot()
 RETURNS TRIGGER AS
@@ -571,6 +602,9 @@ INSERT INTO nieobecnosci (index, lekcja, data) VALUES (401, 1, '11.05.2020');
 INSERT INTO nieobecnosci (index, lekcja, data) VALUES (402, 1, '11.05.2020');
 
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (1, 3, '18.05.2020');
+INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (10, 3, '05.06.2020');
+INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (4, 2, '05.06.2020');
+
 
 INSERT INTO oceny_okresowe VALUES (401,1,3,4);
 INSERT INTO oceny_okresowe VALUES (401,2,4,4);
@@ -584,3 +618,4 @@ GRANT UPDATE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
+

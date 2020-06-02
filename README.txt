@@ -62,6 +62,10 @@ create.sql należy uruchomić w bazie danych o nazwie "school" i schemacie o naz
 
 Aplikacja celowo nie umożliwia modyfikowania tabeli Sale-jest to coś na tyle niezmiennego, że dostęp do tego wydaje nam się logiczny jedynie z poziomu bazy danych.
 Nieobecności dostępne są poprzez menu kontekstowe konkretnego ucznia.
+Każda tabela posiada własny zestaw akcji jakie można wykonać na jej krotkach. Podstawowwymi akcjami są usówanie, dodawanie oraz zmienianie
+(choć nie wszystkie table posiadają te możliwości). W szczególności srednie_ocen nie posiadają tej możliwości jako automatycznie wyliczana tabela(view).
+Pola które mogą mieć wartość null mozna na takie zmienić(jeśli były wypełnione) wpisująć "BRAK" w pole wypełniania.
+
 
 
 
