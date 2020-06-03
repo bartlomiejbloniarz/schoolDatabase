@@ -81,9 +81,11 @@ jednak zmian może dokonać tylko przez tabele służące do wyświetlania dost�
 Przykładowe dane: 
 logowanie użytkowniekiem który ma najwięcej praw dostępu(wszystkie które przewidzieliśmy dla aplikacji): login: sekretariat hasło: sekretariat
 logowanie przykładownym nauczycielem: login: n1 haslo:1234
-Przykładowa klasa: 4E
-Przykładowy uczeń: 401
+logowanie przykładowym uczniem: login: u401 hasło:1234
+Przykładowy uczeń: 401 (ten, którego login został podany powyżej)
 Przykładowy nauczyciel: 1 (ten, którego login został podany powyżej)
+Przykładowa klasa: 4E  (należy do niej 401 i uczy ją między innymi 1 i jest jej wychowawcą)
+
 
 
 

@@ -607,13 +607,3 @@ GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
 
-SELECT p.nazwa,CONCAT(n.imie,' ',n.nazwisko), data, sala, czas,dzien  FROM zastepstwa z JOIN Lekcje l ON lekcja=l.id
-     JOIN nauczyciele_prowadzacy np ON np.id=l.przedmiot JOIN przedmioty p ON np.id_przedmiot=p.id
-    JOIN pracownicy n ON np.nauczyciel=n.id WHERE l.klasa=(SELECT klasa FROM uczniowie WHERE index=401)
-
-SELECT p.nazwa, typ, n.data FROM nieobecnosci n JOIN lekcje l ON n.lekcja=l.id JOIN nauczyciele_prowadzacy np ON np.id=l.przedmiot
-                JOIN przedmioty p ON p.id=np.id_przedmiot WHERE index=401
-
-SELECT p.nazwa, t.dzien, l.czas, typ, komentarz FROM terminarz t JOIN Lekcje l ON lekcja=l.id
-                JOIN nauczyciele_prowadzacy np ON np.id=l.przedmiot JOIN przedmioty p ON np.id_przedmiot=p.id
-                WHERE l.klasa=(SELECT klasa FROM uczniowie WHERE index=401)
