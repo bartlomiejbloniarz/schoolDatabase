@@ -64,16 +64,22 @@ Aplikacja celowo nie umożliwia modyfikowania tabeli Sale-jest to coś na tyle n
 Nieobecności dostępne są poprzez menu kontekstowe konkretnego ucznia.
 Każda tabela posiada własny zestaw akcji jakie można wykonać na jej krotkach. Podstawowwymi akcjami są usówanie, dodawanie oraz zmienianie
 (choć nie wszystkie table posiadają te możliwości). W szczególności srednie_ocen nie posiadają tej możliwości jako automatycznie wyliczana tabela(view).
-Pola które mogą mieć wartość null mozna na takie zmienić(jeśli były wypełnione) wpisująć "BRAK" w pole wypełniania.
+Pola które mogą mieć wartość null(np. kometarze) mozna na takie zmienić(jeśli były wypełnione) wpisująć "BRAK" w pole wypełniania(poza nazwą klasy ucznia i polem absolwent,
+które są w odpowiedni sposób wypełniane automatycznie gdy któreś zostanie zmienione).
+
+Nauczyciele mają ograniczone prawa dostępu(stosujemy role, którym przydzialene są uprawnienia w bazie danych),
+każdy ma dostęp do uczniów których uczy(i ich ocen okresowych i ich średnich ocen),
+swojego planu lekcji(choć może zobaczyć też plan lekcji klas), swojego terminarza, swoich zastępstw(tych, które on prowadzi),
+wprowadzonych przez siebie ocen, klas które uczy, przedmiotów które prowadzi oraz dostęp do panelu wychowawcy pozwalającego na
+zarządzanie nieobecnościami uczniów których jest wychowawcą.
 
 
 Przykładowe dane: 
 logowanie użytkowniekiem który ma najwięcej praw dostępu(wszystkie które przewidzieliśmy dla aplikacji): login: sekretariat hasło: sekretariat
 logowanie przykładownym nauczycielem: login: n1 haslo:1234
-Nauczyciele mają ograniczone prawa dostępu, każdy ma dostęp do uczniów których uczy(i ich ocen okresowych i ich średnich ocen), swojego planu lekcji(choć może zobaczyć też plan lekcji klas), swojego terminarza, swoich zastępstw(tych, które on prowadzi), wprowadzonych przez siebie ocen, klas które uczy oraz przedmiotów które prowadzi . 
-Przykładowa klasa: 4
+Przykładowa klasa: 4E
 Przykładowy uczeń: 401
-Przykładowy nauczyciel: 1
+Przykładowy nauczyciel: 1 (ten, którego login został podany powyżej)
 
 
 
@@ -95,14 +101,14 @@ Przykładowe dane
 Clear.sql
 
 Kwestia aplikacji:
-szkielet projektu, niektóre funkcjonalności. Możliwość logowania się przez różne typy użytkowników w inny sposób. 
+szkielet projektu, niektóre funkcjonalności. Możliwość logowania się przez różne typy użytkowników w inny sposób. Część widoków.
 ------------------------------------------------------------------------------------------------------
 Inka Sokołowska:
 Stworzone tabele:
 Lekcje, Sale, Uczniowie, Klasy, Pracownicy, Zastepstwa, Oceny_okresowe, Nauczyciele_prowadzacy.
 
 Stworzone triggery(oraz konieczne do nich funkcje): 
-dodaj_pracownika, dodaj_dziecko, dodaj_lekcje, zamien_nauczyciela, nieobecnosc, ocena_z_lekcji, usun_ucznia, 
+dodaj_pracownika, dodaj_dziecko, dodaj_lekcje, zamien_nauczyciela, dodaj_nieobecnosc, ocena_z_lekcji, usun_ucznia,
 usun_nauczyciela, dodaj_klase, dodaj_nauczyciela_prowadzacego, dodaj_ocene_okresowa, dodaj_przedmiot
 
 Stworzone funkcje:
@@ -114,4 +120,4 @@ srednie_ocen
 Readme
 
 Kwestia aplikacji:
-funkcjonalności jak dodawanie, usuwanie, zmienianie. 
+funkcjonalności jak dodawanie, usuwanie, zmienianie, zmiana hasla. Część widoków.

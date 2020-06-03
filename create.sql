@@ -116,7 +116,9 @@ begin
 
         IF (SELECT coalesce(COUNT(*),0)FROM lekcje l WHERE
            (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE id=l.przedmiot)=NEW.przedmiot AND
-        l.klasa=klasaUcznia)=0 THEN RETURN NULL; END IF;
+        l.klasa=klasaUcznia)=0 THEN RAISE EXCEPTION 'Uczen nie ma takiej lekcji'; END IF;
+
+        if NEW.komentarz IS NULL THEN NEW.komentarz='';END IF;
 
         if NEW.data IS NULL THEN NEW.data=current_timestamp;END IF;
         return NEW;
@@ -125,23 +127,6 @@ $$
 LANGUAGE plpgsql;
 
 CREATE TRIGGER "ocena_z_lekcji" BEFORE INSERT OR UPDATE ON Oceny FOR EACH ROW EXECUTE PROCEDURE ocena_z_lekcji();
----------------------------------------------------------------------------------------
-create or replace function nieobecnosc()
-    returns TRIGGER AS
-$$
-DECLARE
-       klasaUcznia varchar(2);
-begin
-        klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
-
-        IF (SELECT klasa FROM lekcje WHERE lekcje.id=NEW.lekcja)<>klasaUcznia THEN RETURN NULL;END IF;
-
-        return NEW;
-end;
-$$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER "nieobecnosc" BEFORE INSERT OR UPDATE ON Nieobecnosci FOR EACH ROW EXECUTE PROCEDURE nieobecnosc();
 ---------------------------------------------------------------------------------------
 
 create or replace function dodaj_dziecko()
@@ -318,8 +303,14 @@ CREATE OR REPLACE FUNCTION dodaj_nieobecnosc()
 RETURNS TRIGGER AS
     $$
     DECLARE a varchar;
-    b NUMERIC;
+            b NUMERIC;
+         klasaUcznia varchar(2);
     BEGIN
+        IF TG_OP='INSERT' AND NEW.typ IS NULL THEN NEW.typ='N';END IF;
+        klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
+        IF (SELECT klasa FROM lekcje WHERE lekcje.id=NEW.lekcja)<>klasaUcznia THEN RAISE EXCEPTION 'Uczen nie ma wtedy lekcji';
+        END IF;
+
         a = (SELECT dzien FROM lekcje WHERE id=NEW.lekcja);
         b = (EXTRACT(DOW FROM NEW.data::timestamp));
         IF((a='Poniedziałek' AND b=1) OR (a='Wtorek' AND b=2) OR (a='Środa' AND b=3)
@@ -388,19 +379,7 @@ $$
 LANGUAGE plpgsql;
 
 CREATE TRIGGER dodaj_klase BEFORE INSERT OR UPDATE ON Klasy FOR EACH ROW EXECUTE PROCEDURE dodaj_klase();
-----------------------------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION dodaj_ocene()
-RETURNS TRIGGER AS
-$$
-BEGIN
-    if NEW.komentarz IS NULL THEN NEW.komentarz='';END IF;
-    RETURN NEW;
-end;
-$$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER dodaj_ocene BEFORE INSERT OR UPDATE ON Oceny FOR EACH ROW EXECUTE PROCEDURE dodaj_ocene();
 ----------------------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION dodaj_przedmiot()
 RETURNS TRIGGER AS
