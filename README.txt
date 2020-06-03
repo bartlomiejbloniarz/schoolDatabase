@@ -72,6 +72,10 @@ każdy ma dostęp do uczniów których uczy(i ich ocen okresowych i ich średnic
 swojego planu lekcji(choć może zobaczyć też plan lekcji klas), swojego terminarza, swoich zastępstw(tych, które on prowadzi),
 wprowadzonych przez siebie ocen, klas które uczy, przedmiotów które prowadzi oraz dostęp do panelu wychowawcy pozwalającego na
 zarządzanie nieobecnościami uczniów których jest wychowawcą.
+Niedostępne mozliwości są albo zupełnie niemożliwe do wykonania przez aplikacje, albo powodują pojawienie się wiadomości o niepoprawnej akcji
+zamiast jej wykonania.
+Nauczyciel może zobaczyć cały terminarz klas które uczyprzykładowo w celu ustalenia niekolidującego terminu) oraz wszystkie oceny wychowanków,
+jednak zmian może dokonać tylko przez tabele służące do wyświetlania dostępnych do zmiany dla niego informacji.
 
 
 Przykładowe dane: 

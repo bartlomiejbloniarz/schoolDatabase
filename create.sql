@@ -12,6 +12,14 @@ GRANT Administracja TO sekretariat;
 
 CREATE TYPE TYTUL AS ENUM ('DOKTOR', 'MAGISTER', 'PROFESOR', 'DOKTOR HABILITOWANY');
 
+CREATE TYPE DZIEN AS ENUM ('Poniedziałek', 'Wtorek', 'Środa','Czwartek', 'Piątek');
+
+CREATE TYPE ABSOLWENT AS ENUM ('T', 'N');
+
+CREATE TYPE SPRAWDZIANY AS ENUM ('sprawdzian', 'kartkowka', 'odpowiedz');
+
+CREATE TYPE OBECNOSC AS ENUM ('N', 'U', 'W', 'G');
+
 --TABLES
 
 CREATE TABLE Pracownicy(
@@ -31,11 +39,11 @@ CREATE TABLE Klasy(
 
 CREATE TABLE Uczniowie(
     index INTEGER CONSTRAINT PK_UCZ PRIMARY KEY,
-    klasa CHARACTER(2) REFERENCES Klasy(klasa),
+    klasa CHARACTER(2) NOT NULL REFERENCES Klasy(klasa),
     imie CHARACTER VARYING NOT NULL,
     nazwisko CHARACTER VARYING NOT NULL,
-    absolwent CHAR(1),
-    CHECK (absolwent='T' OR absolwent='N')
+    absolwent ABSOLWENT NOT NULL DEFAULT 'N'
+
 );
 
 CREATE TABLE Sale(
@@ -49,7 +57,7 @@ CREATE TABLE Przedmioty(
 );
 CREATE TABLE Nauczyciele_prowadzacy(
     id INTEGER PRIMARY KEY,
-    id_przedmiot INTEGER references Przedmioty(id),
+    id_przedmiot INTEGER NOT NULL REFERENCES Przedmioty(id),
     nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id)
 );
 
@@ -59,49 +67,48 @@ CREATE TABLE Lekcje(
     sala INTEGER NOT NULL REFERENCES Sale(nr),
     klasa CHARACTER VARYING NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
-    dzien CHARACTER VARYING NOT NULL,
-    CHECK(dzien='Poniedziałek' OR dzien='Wtorek' OR dzien='Środa' OR dzien='Czwartek' OR dzien='Piątek'),
+    dzien DZIEN NOT NULL,
     UNIQUE(sala,czas,dzien)
 );
 
 CREATE TABLE Oceny(
-    index INTEGER REFERENCES uczniowie,
-    przedmiot INTEGER REFERENCES przedmioty(id),
-    ocena NUMERIC(3,2) CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
+    index INTEGER NOT NULL REFERENCES uczniowie,
+    przedmiot INTEGER NOT NULL REFERENCES przedmioty(id),
+    ocena NUMERIC(3,2) NOT NULL CHECK (ocena in (1, 1.5, 1.75, 2, 2.5, 2.75, 3, 3.5, 3.75, 4, 4.5, 4.75, 5, 5.5, 5.75, 6)),
     komentarz VARCHAR,
     data DATE
 );
 
 CREATE TABLE Nieobecnosci(
-    index INTEGER REFERENCES uczniowie,
-    lekcja INTEGER REFERENCES Lekcje,
-    typ CHAR(1) CHECK (typ in ('N', 'U', 'W', 'G')) DEFAULT 'N',
-    data DATE,
+    index INTEGER NOT NULL REFERENCES uczniowie,
+    lekcja INTEGER NOT NULL REFERENCES Lekcje,
+    typ OBECNOSC NOT NULL DEFAULT 'N',
+    data DATE NOT NULL,
     PRIMARY KEY (index, lekcja, data)
 );
 
 CREATE TABLE Terminarz(
-    lekcja INTEGER REFERENCES lekcje,
-    typ varchar CHECK (typ in ('sprawdzian', 'kartkowka', 'odpowiedz')),
+    lekcja INTEGER NOT NULL REFERENCES lekcje,
+    typ SPRAWDZIANY NOT NULL,
     komentarz varchar,
-    dzien DATE,
+    dzien DATE NOT NULL,
     PRIMARY KEY (lekcja,dzien)
 );
 
 CREATE TABLE Zastepstwa(
     lekcja INTEGER NOT NULL REFERENCES Lekcje,
     nauczyciel INTEGER NOT NULL REFERENCES Pracownicy(id),
-    data DATE,
+    data DATE NOT NULL,
    PRIMARY KEY (lekcja,data)
 );
 CREATE TABLE oceny_okresowe(
-    index INTEGER REFERENCES Uczniowie,
-    przedmiot INTEGER REFERENCES Przedmioty(id),
+    index INTEGER NOT NULL REFERENCES Uczniowie,
+    przedmiot INTEGER NOT NULL REFERENCES Przedmioty(id),
     ocena_srodroczna INTEGER,
     ocena_koncoworoczna INTEGER,
     CHECK (ocena_srodroczna>0 AND ocena_srodroczna<7),
     CHECK (ocena_koncoworoczna>0 AND ocena_koncoworoczna<7),
-    rok NUMERIC(4),
+    rok NUMERIC(4) NOT NULL,
     PRIMARY KEY (index,przedmiot,rok)
 );
 --TRIGGERS
@@ -455,21 +462,22 @@ begin
 end;
 $$
 language plpgsql;
+------------------------
 create or replace function plan_lekcji_ucznia(indexUcznia integer)
-returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar) as
+returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
 $$
 begin
     RETURN QUERY SELECT * FROM plan_Lekcji((SELECT klasa FROM uczniowie u WHERE u.index=indexUcznia));
 end;
 $$
 language plpgsql;
-
+------------------------
 create or replace function plan_lekcji_nauczyciela(idn int)
-    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,klasa varchar(2)) as
+    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,klasa varchar(2),id_lekcji integer) as
 $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
-    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, l.klasa FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
+    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, l.klasa, l.id FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
         l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn);
 end;
 $$
@@ -599,3 +607,13 @@ GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
 
+SELECT p.nazwa,CONCAT(n.imie,' ',n.nazwisko), data, sala, czas,dzien  FROM zastepstwa z JOIN Lekcje l ON lekcja=l.id
+     JOIN nauczyciele_prowadzacy np ON np.id=l.przedmiot JOIN przedmioty p ON np.id_przedmiot=p.id
+    JOIN pracownicy n ON np.nauczyciel=n.id WHERE l.klasa=(SELECT klasa FROM uczniowie WHERE index=401)
+
+SELECT p.nazwa, typ, n.data FROM nieobecnosci n JOIN lekcje l ON n.lekcja=l.id JOIN nauczyciele_prowadzacy np ON np.id=l.przedmiot
+                JOIN przedmioty p ON p.id=np.id_przedmiot WHERE index=401
+
+SELECT p.nazwa, t.dzien, l.czas, typ, komentarz FROM terminarz t JOIN Lekcje l ON lekcja=l.id
+                JOIN nauczyciele_prowadzacy np ON np.id=l.przedmiot JOIN przedmioty p ON np.id_przedmiot=p.id
+                WHERE l.klasa=(SELECT klasa FROM uczniowie WHERE index=401)
