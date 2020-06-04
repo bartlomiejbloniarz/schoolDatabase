@@ -48,6 +48,8 @@ DROP FUNCTION IF EXISTS dodaj_klase() CASCADE;
 DROP FUNCTION IF EXISTS usun_uzytkownikow() CASCADE;
 drop function if exists czy_dziecko_ma_klase() cascade;
 drop function if exists dodaj_ocene() cascade;
+drop function if exists plan_lekcji(kl integer) CASCADE;
+drop function if exists klasa(kl integer) CASCADE;
 DROP TABLE if EXISTS Nauczyciele_prowadzacy CASCADE;
 DROP TABLE if EXISTS zastepstwa;
 DROP TABLE if EXISTS Terminarz;
@@ -61,9 +63,14 @@ DROP TABLE if EXISTS Uczniowie;
 DROP TABLE if EXISTS Klasy;
 DROP TABLE if EXISTS Zastepstwa;
 DROP TABLE if EXISTS Pracownicy CASCADE;
+DROP TABLE if EXISTS lata_szkolne;
 
 DROP SEQUENCE IF EXISTS Lekcje_id_seq;
 DROP TYPE if EXISTS TYTUL;
+DROP TYPE if EXISTS DZIEN;
+DROP TYPE if EXISTS absolwent;
+DROP TYPE if EXISTS sprawdziany;
+DROP TYPE if EXISTS obecnosc;
 
 
 DROP ROLE Administracja;

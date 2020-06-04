@@ -22,6 +22,11 @@ CREATE TYPE OBECNOSC AS ENUM ('N', 'U', 'W', 'G');
 
 --TABLES
 
+CREATE TABLE lata_szkolne(
+    id integer PRIMARY KEY,
+    nazwa char(9) NOT NULL
+);
+
 CREATE TABLE Pracownicy(
     id INTEGER NOT NULL CONSTRAINT PK_PRAC PRIMARY KEY CHECK(id>=0),
     imie CHARACTER VARYING NOT NULL,
@@ -31,19 +36,21 @@ CREATE TABLE Pracownicy(
 
 CREATE TABLE Klasy(
     nr_klasy NUMERIC(1) NOT NULL,
-    klasa VARCHAR(2) NOT NULL,
+    nazwa_klasy CHAR(1) NOT NULL,
+    klasa integer NOT NULL,
     wychowawca INTEGER NOT NULL REFERENCES Pracownicy(id),
     PRIMARY KEY (klasa),
-    check(nr_klasy>0 AND nr_klasy<7)
+    UNIQUE (nr_klasy, nazwa_klasy),
+    check(nr_klasy>0 AND nr_klasy<9)
 );
 
 CREATE TABLE Uczniowie(
     index INTEGER CONSTRAINT PK_UCZ PRIMARY KEY,
-    klasa CHARACTER(2) NOT NULL REFERENCES Klasy(klasa),
+    klasa integer,
     imie CHARACTER VARYING NOT NULL,
     nazwisko CHARACTER VARYING NOT NULL,
-    absolwent ABSOLWENT NOT NULL DEFAULT 'N'
-
+    absolwent ABSOLWENT NOT NULL DEFAULT 'N',
+    CONSTRAINT uczniowie_klasa_fkey foreign key (klasa) REFERENCES klasy(klasa)
 );
 
 CREATE TABLE Sale(
@@ -65,7 +72,7 @@ CREATE TABLE Lekcje(
     id INTEGER PRIMARY KEY,
     przedmiot INTEGER NOT NULL REFERENCES Nauczyciele_prowadzacy(id),
     sala INTEGER NOT NULL REFERENCES Sale(nr),
-    klasa CHARACTER VARYING NOT NULL REFERENCES Klasy(klasa),
+    klasa integer NOT NULL REFERENCES Klasy(klasa),
     czas TIME NOT NULL, CHECK (EXTRACT(hour FROM czas)>=8 AND EXTRACT(hour FROM czas)<=17 AND EXTRACT(minutes FROM czas)=0),
     dzien DZIEN NOT NULL,
     UNIQUE(sala,czas,dzien)
@@ -108,7 +115,7 @@ CREATE TABLE oceny_okresowe(
     ocena_koncoworoczna INTEGER,
     CHECK (ocena_srodroczna>0 AND ocena_srodroczna<7),
     CHECK (ocena_koncoworoczna>0 AND ocena_koncoworoczna<7),
-    rok NUMERIC(4) NOT NULL,
+    rok INTEGER NOT NULL REFERENCES lata_szkolne(id),
     PRIMARY KEY (index,przedmiot,rok)
 );
 --TRIGGERS
@@ -117,7 +124,7 @@ create or replace function ocena_z_lekcji()
     returns TRIGGER AS
 $$
 DECLARE
-       klasaUcznia varchar(2);
+       klasaUcznia integer;
 begin
         klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
 
@@ -156,9 +163,7 @@ create or replace function dodaj_dziecko()
         --AND NEW.klasa IS NOT NULL THEN RAISE EXCEPTION 'Absolwent nie może chodzić do klasy';END IF;
 
         dzieci=(SELECT COUNT(*) FROM Uczniowie WHERE klasa=NEW.klasa);
-        IF TG_OP='UPDATE' AND OLD.klasa<>NEW.klasa THEN dzieci=dzieci+1;END IF;
-        IF TG_OP='INSERT' THEN dzieci=dzieci+1;END IF;
-        if dzieci>40 then RAISE EXCEPTION 'Za duzo dzieci w klasie';end if;
+
         for record in SELECT* FROM Lekcje loop
             if(record.klasa=NEW.klasa AND dzieci >(SELECT liczba_miejsc FROM sale WHERE sale.nr=record.sala))
                 THEN RAISE EXCEPTION 'Klasa jest pełna';END IF;
@@ -311,7 +316,7 @@ RETURNS TRIGGER AS
     $$
     DECLARE a varchar;
             b NUMERIC;
-         klasaUcznia varchar(2);
+         klasaUcznia integer;
     BEGIN
         IF TG_OP='INSERT' AND NEW.typ IS NULL THEN NEW.typ='N';END IF;
         klasaUcznia=(SELECT u.klasa FROM uczniowie u WHERE u.index=NEW.index);
@@ -379,7 +384,8 @@ CREATE OR REPLACE FUNCTION dodaj_klase()
 RETURNS TRIGGER AS
 $$
 BEGIN
-    IF NOT(NEW.klasa ~ '^[1-6][a-z]$')AND NOT (NEW.klasa ~ '^[1-6][A-Z]$') THEN RAISE EXCEPTION 'Niepoprawna nazwa klasy';END IF;
+    IF (NEW.klasa IS NULL) THEN NEW.klasa = COALESCE((SELECT MAX(klasa) FROM klasy), 0)+1; END IF;
+    IF NOT(NEW.nazwa_klasy ~ '^[a-z]$')AND NOT (NEW.nazwa_klasy ~ '^[A-Z]$') THEN RAISE EXCEPTION 'Niepoprawna nazwa klasy';END IF;
     RETURN NEW;
 end;
 $$
@@ -420,7 +426,8 @@ CREATE OR REPLACE FUNCTION dodaj_ocene_okresowa()
 RETURNS TRIGGER AS
 $$
 BEGIN
-    IF NEW.rok IS NULL THEN NEW.rok=EXTRACT(year FROM current_timestamp);END IF;
+    IF NEW.przedmiot not in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa in (SELECT klasa FROM uczniowie WHERE index=NEW.index))
+    THEN RAISE EXCEPTION 'Uczeń nie ma takiej lekcji'; END IF;
 
     IF TG_OP='INSERT' AND (NEW.index,NEW.przedmiot,NEW.rok) IN (SELECT index,przedmiot,rok FROM oceny_okresowe)
         AND NEW.ocena_koncoworoczna IS NOT NULL
@@ -447,8 +454,49 @@ LANGUAGE plpgsql;
 CREATE TRIGGER dodaj_ocene_okresowa BEFORE INSERT OR UPDATE ON oceny_okresowe FOR EACH ROW EXECUTE PROCEDURE dodaj_ocene_okresowa();
 
 --FUNCTIONS
-create or replace function plan_lekcji(kl varchar)
-    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
+
+CREATE OR REPLACE FUNCTION klasa (kl integer) RETURNS char(2) AS
+    $$
+    begin
+        RETURN (SELECT CONCAT(nr_klasy,nazwa_klasy) FROM klasy WHERE klasa=kl);
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
+CREATE OR REPLACE FUNCTION klasa (kl char(2)) RETURNS int AS
+    $$
+    begin
+        RETURN (SELECT klasa FROM klasy WHERE nr_klasy = substring(kl,1,1)::int AND nazwa_klasy = substring(kl,2,2));
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
+CREATE OR REPLACE FUNCTION rok (rk integer) RETURNS char(9) AS
+    $$
+    begin
+        RETURN (SELECT nazwa FROM lata_szkolne WHERE id=rk);
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
+CREATE OR REPLACE FUNCTION rok (rk char(9)) RETURNS int AS
+    $$
+    begin
+        RETURN (SELECT id FROM lata_szkolne WHERE nazwa = rk);
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
+create or replace function plan_lekcji(kl int)
+    returns TABLE(przedmiot varchar,czas text ,dzien DZIEN,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
 $$
 begin
     IF kl NOT IN (SELECT klasa FROM klasy) THEN RAISE EXCEPTION 'Nie ma takiej klasy';END IF;
@@ -462,6 +510,7 @@ begin
 end;
 $$
 language plpgsql;
+
 ------------------------
 create or replace function plan_lekcji_ucznia(indexUcznia integer)
 returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
@@ -471,9 +520,11 @@ begin
 end;
 $$
 language plpgsql;
+
 ------------------------
+
 create or replace function plan_lekcji_nauczyciela(idn int)
-    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,klasa varchar(2),id_lekcji integer) as
+    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,klasa INTEGER,id_lekcji integer) as
 $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
@@ -482,9 +533,10 @@ begin
 end;
 $$
 language plpgsql;
+
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION terminarz_klasy(kl varchar(2))
+CREATE OR REPLACE FUNCTION terminarz_klasy(kl integer)
 RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ varchar, komentarz varchar) AS
     $$
     BEGIN
@@ -493,6 +545,98 @@ RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ varchar, koment
             WHERE np.id=l.przedmiot)
         ,t.dzien,t.typ,t.komentarz FROM terminarz t LEFT JOIN lekcje l ON l.id=t.lekcja
         WHERE l.klasa=kl;
+    end;
+    $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION swiadectwa_srednie(rokid int)
+RETURNS TABLE (index int, srednia numeric(3,2)) AS
+    $$
+    BEGIN
+        RETURN QUERY
+        SELECT u.index, ROUND(AVG(ocena_koncoworoczna),2) FROM uczniowie u JOIN oceny_okresowe oo on u.index = oo.index WHERE u.absolwent='N' AND oo.rok=rokid GROUP BY u.index;
+    end;
+    $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION koniec_roku(rokid int)
+RETURNS VOID AS
+    $$
+    declare
+        i int;
+        j int;
+    begin
+        FOR i in (SELECT index FROM uczniowie WHERE absolwent='N') LOOP
+            FOR j in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa = (SELECT klasa FROM Uczniowie WHERE index = i)) LOOP
+                if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=rokid) IS NULL) THEN RAISE EXCEPTION 'Brak części ocen końcowych'; END IF;
+                end loop;
+            end loop;
+    end;
+    $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION generuj_swiadectwo(ind int, rokid int)
+RETURNS TABLE (index int, Przedmiot varchar, ocena int) AS
+    $$
+    begin
+        RETURN QUERY SELECT oo.index, p.nazwa, ocena_koncoworoczna FROM oceny_okresowe oo JOIN Przedmioty P on oo.przedmiot = P.id WHERE oo.index = ind AND rok=rokid;
+    end;
+    $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION koniec_roku_czyszczenie(rokid int)
+RETURNS VOID AS
+    $$
+    DECLARE
+        i int;
+        klas int;
+        klasn char(1);
+        a record;
+    begin
+        PERFORM koniec_roku(rokid);
+        CREATE TEMP TABLE tab (index int);
+        FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
+                INSERT INTO tab VALUES (i);
+            end loop;
+        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1) LOOP
+                INSERT INTO tab VALUES (i);
+            end loop;
+        DELETE FROM oceny WHERE TRUE;
+        DELETE FROM nieobecnosci WHERE TRUE;
+        DELETE FROM terminarz WHERE TRUE;
+        DELETE FROM zastepstwa WHERE TRUE;
+        DELETE FROM lekcje WHERE TRUE;
+        FOR i in (SELECT distinct tab.index FROM tab) LOOP
+            klas = (SELECT u.klasa FROM uczniowie u WHERE u.index = tab.index);
+            klasn = (SELECT kl.nazwa_klasy FROM klasy kl WHERE kl.klasa = klas);
+            klas = (SELECT kl.nr_klasy FROM klasy kl WHERE kl.klasa=klas);
+            IF (SELECT klasa FROM klasy WHERE nazwa_klasy=klasn AND nr_klasy=klas-1) IS NOT NULL THEN
+                UPDATE uczniowie SET klasa = (SELECT klasa FROM klasy WHERE nazwa_klasy=klasn AND nr_klasy=klas-1) WHERE index = i;
+            ELSE UPDATE uczniowie SET klasa =
+                (SELECT k.klasa FROM klasy k LEFT JOIN uczniowie u on k.klasa = u.klasa WHERE k.nr_klasy=
+                (SELECT nr_klasy FROM klasy kl WHERE kl.klasa = klas)-1 GROUP BY k.klasa ORDER BY COUNT(*) LIMIT 1)
+                WHERE index=i;
+            END IF;
+        end loop;
+        FOR i in (SELECT index FROM uczniowie WHERE klasa in (SELECT klasa FROM klasy WHERE nr_klasy=8)) LOOP
+            IF i not IN (SELECT distinct tab.index FROM tab) THEN
+                UPDATE uczniowie SET klasa=null, absolwent='T' WHERE Uczniowie.index=i;
+            end if;
+            end loop;
+        FOR a in (SELECT * FROM klasy ORDER BY klasa DESC) LOOP
+            if (a.nr_klasy=8) THEN DELETE FROM klasy WHERE klasa = a.klasa;
+            ELSE UPDATE klasy SET nr_klasy = a.nr_klasy+1 WHERE klasa = a.klasa;
+            END IF;
+            end loop;
+        DROP TABLE tab;
     end;
     $$
 language plpgsql;
@@ -507,8 +651,8 @@ CREATE or replace VIEW "srednie_ocen" AS
     GROUP BY o.przedmiot, u.index;
 
 SELECT * FROM srednie_ocen;
---INSERTS
 
+--INSERTS
 
 INSERT INTO Pracownicy (imie, nazwisko, tytul) VALUES ('A', 'Bananowski',   'MAGISTER');
 INSERT INTO Pracownicy (imie, nazwisko,  tytul) VALUES ('C', 'Drozd',   'MAGISTER');
@@ -516,30 +660,28 @@ INSERT INTO Pracownicy (imie, nazwisko,  tytul) VALUES ('E', 'Figowa',  'DOKTOR'
 INSERT INTO Pracownicy (imie, nazwisko,  tytul) VALUES ('G', 'Haber',   null);
 INSERT INTO Pracownicy (imie, nazwisko,  tytul) VALUES ('A', 'Borówka',   null);
 
+INSERT INTO Klasy (nr_klasy, nazwa_klasy, klasa, wychowawca) VALUES (1,'E', 1, 2);
+INSERT INTO Klasy  VALUES (4,'E',2, 1);
+INSERT INTO Klasy  VALUES (2,'E',3, 3);
 
-INSERT INTO Klasy  VALUES (1,'1E', 2);
-INSERT INTO Klasy  VALUES (4,'4E', 1);
-INSERT INTO Klasy  VALUES (2,'2E', 3);
-
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (401, '4E', 'A', 'A');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (402, '4E', 'B', 'B');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (403, '4E', 'C', 'C');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (404, '4E', 'D', 'D');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (405, '4E', 'E', 'E');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (406, '4E', 'F', 'F');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (101, '1E', 'G', 'G');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (102, '1E', 'H', 'H');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (103, '1E', 'H', 'H');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (407, '4E', 'A', 'B');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (408, '4E', 'B', 'C');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (409, '4E', 'C', 'D');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (410, '4E', 'D', 'E');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (411, '4E', 'E', 'F');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (412, '4E', 'F', 'G');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (104, '1E', 'G', 'H');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (105, '1E', 'H', 'I');
-INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (106, '1E', 'H', 'J');
-
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (401, 2, 'Alivia','Goss');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (402, 2, 'Elijah','Pina');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (403, 2, 'Aditi','Mathews');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (404, 2, 'Haley','Shelton');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (405, 2, 'Kolt','Holcomb');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (406, 2, 'Aliyah','Suggs');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (407, 2, 'Layla','Varner');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (408, 2, 'Millicent','Olson');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (409, 2, 'Kennedy','Rushing');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (410, 2, 'Lilyanna','Pritchard');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (411, 2, 'Hugh','Scruggs');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (412, 2, 'Jamar','Peacock');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (101, 1, 'Braydan','Saunders');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (102, 1, 'Kai','Downey');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (103, 1, 'Hallie','Platt');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (104, 1, 'Jarvis','Childress');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (105, 1, 'Ally','Zimmerman');
+INSERT INTO Uczniowie (index, klasa, imie, nazwisko) VALUES (106, 1, 'Bentley','Draper');
 
 INSERT INTO Sale (nr, liczba_miejsc) VALUES (1, 35);
 INSERT INTO Sale (nr, liczba_miejsc) VALUES (2, 37);
@@ -558,22 +700,19 @@ INSERT INTO Nauczyciele_prowadzacy VALUES (1,4,1);
 INSERT INTO Nauczyciele_prowadzacy VALUES (2,2,2);
 INSERT INTO Nauczyciele_prowadzacy VALUES (3,3,2);
 
-
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 1, '4E', '12:00', 'Poniedziałek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 2, '1E', '12:00', 'Poniedziałek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (3, 3, '4E', '12:00', 'Środa');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 11, '4E', '11:00', 'Piątek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '1E', '8:00', 'Czwartek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (3, 3, '4E', '10:00', 'Środa');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, '4E', '11:00', 'Środa');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '9:00', 'Czwartek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, '4E', '10:00', 'Czwartek');
-INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 11, '4E', '10:00', 'Piątek');
-
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 1, 2, '12:00', 'Poniedziałek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 2, 1, '12:00', 'Poniedziałek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (3, 3, 2, '12:00', 'Środa');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 11, 2, '11:00', 'Piątek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, 1, '8:00', 'Czwartek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (3, 3, 2, '10:00', 'Środa');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 3, 2, '11:00', 'Środa');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, 2, '9:00', 'Czwartek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (1, 11, 2, '10:00', 'Czwartek');
+INSERT INTO Lekcje (przedmiot, sala, klasa, czas, dzien) VALUES (2, 11, 2, '10:00', 'Piątek');
 
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '11.05.2020');
 INSERT INTO Terminarz (lekcja, typ, komentarz, dzien) VALUES (1, 'sprawdzian', '', '18.05.2020');
-
 
 INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (401, 1, 5, '');
 INSERT INTO Oceny (index, przedmiot, ocena, komentarz) VALUES (402, 1, 3, '');
@@ -593,13 +732,60 @@ INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (1, 3, '18.05.2020');
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (10, 3, '05.06.2020');
 INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (4, 2, '05.06.2020');
 
+INSERT INTO lata_szkolne (id, nazwa) VALUES (0, '2018/2019');
+INSERT INTO lata_szkolne (id, nazwa) VALUES (1, '2019/2020');
 
-INSERT INTO oceny_okresowe VALUES (401,1,3,4);
-INSERT INTO oceny_okresowe VALUES (401,2,4,4);
-INSERT INTO oceny_okresowe VALUES (101,1,4,5,2019);
-INSERT INTO oceny_okresowe VALUES (101,1,5,5);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,1,3,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,2,2,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,4,4,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (402,1,3,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (402,2,3,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (402,4,5,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (403,1,3,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (403,2,4,2,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (403,4,5,6,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (404,1,3,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (404,2,4,2,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (404,4,5,6,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (405,1,3,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (405,2,4,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (405,4,5,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (406,1,3,2,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (406,2,4,2,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (406,4,5,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (407,1,3,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (407,2,4,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (407,4,5,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (408,1,3,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (408,2,4,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (408,4,5,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (409,1,3,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (409,2,4,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (409,4,5,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (410,1,3,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (410,2,4,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (410,4,5,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (411,1,3,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (411,2,4,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (411,4,5,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (412,1,3,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (412,2,4,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (412,4,5,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (101,1,4,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (101,4,5,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (102,1,4,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (102,4,5,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (103,1,4,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (103,4,5,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (104,1,4,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (104,4,5,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (105,1,4,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (105,4,5,5,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (106,1,4,3,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (106,4,5,4,1);
 
 --GRANTS
+
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT INSERT ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT UPDATE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
