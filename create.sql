@@ -513,7 +513,7 @@ language plpgsql;
 
 ------------------------
 create or replace function plan_lekcji_ucznia(indexUcznia integer)
-returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
+returns TABLE(przedmiot varchar,czas text ,dzien DZIEN,sala INTEGER,nauczyciel varchar,id_lekcji integer) as
 $$
 begin
     RETURN QUERY SELECT * FROM plan_Lekcji((SELECT klasa FROM uczniowie u WHERE u.index=indexUcznia));
@@ -524,7 +524,7 @@ language plpgsql;
 ------------------------
 
 create or replace function plan_lekcji_nauczyciela(idn int)
-    returns TABLE(przedmiot varchar,czas text ,dzien VARCHAR,sala INTEGER,klasa INTEGER,id_lekcji integer) as
+    returns TABLE(przedmiot varchar,czas text ,dzien DZIEN,sala INTEGER,klasa INTEGER,id_lekcji integer) as
 $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
@@ -792,4 +792,3 @@ GRANT UPDATE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
-
