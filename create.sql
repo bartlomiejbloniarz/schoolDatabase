@@ -529,7 +529,7 @@ $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
     return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, l.klasa, l.id FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
-        l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn);
+        l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn) ORDER BY l.dzien, l.czas;
 end;
 $$
 language plpgsql;
@@ -557,6 +557,28 @@ RETURNS TABLE (index int, srednia numeric(3,2)) AS
     BEGIN
         RETURN QUERY
         SELECT u.index, ROUND(AVG(ocena_koncoworoczna),2) FROM uczniowie u JOIN oceny_okresowe oo on u.index = oo.index WHERE u.absolwent='N' AND oo.rok=rokid GROUP BY u.index;
+    end;
+    $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION koniec_roku_braki(rokid int)
+RETURNS TABLE (index_ucznia int, przedmiot_brak int) AS
+    $$
+    declare
+        i int;
+        j int;
+    begin
+        CREATE TEMP TABLE tab(ind int, p int) ON COMMIT DROP;
+        FOR i in (SELECT u.index FROM uczniowie u WHERE absolwent='N') LOOP
+            FOR j in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa = (SELECT klasa FROM Uczniowie WHERE index = i)) LOOP
+                if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=rokid) IS NULL) THEN
+                INSERT INTO tab VALUES (i,j);
+                END IF;
+                end loop;
+            end loop;
+        RETURN QUERY SELECT * FROM tab GROUP BY 1,2;
     end;
     $$
 language plpgsql;
@@ -592,17 +614,34 @@ language plpgsql;
 
 -----------------------------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION niezdajacy_uczniowie()
+RETURNS TABLE (index_ucznia int) AS
+    $$
+    DECLARE i int;
+    begin
+        CREATE TEMP TABLE tab (index int) ON COMMIT DROP;
+        FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
+                INSERT INTO tab VALUES (i);
+            end loop;
+        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1) LOOP
+                INSERT INTO tab VALUES (i);
+            end loop;
+        RETURN QUERY SELECT * FROM tab;
+    end;
+    $$
+language plpgsql;
+
+-----------------------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION koniec_roku_czyszczenie(rokid int)
-RETURNS VOID AS
+RETURNS TABLE (index_ucznia int) AS
     $$
     DECLARE
         i int;
-        klas int;
-        klasn char(1);
         a record;
     begin
         PERFORM koniec_roku(rokid);
-        CREATE TEMP TABLE tab (index int);
+        CREATE TEMP TABLE tab (index int) ON COMMIT DROP;
         FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
@@ -614,29 +653,15 @@ RETURNS VOID AS
         DELETE FROM terminarz WHERE TRUE;
         DELETE FROM zastepstwa WHERE TRUE;
         DELETE FROM lekcje WHERE TRUE;
-        FOR i in (SELECT distinct tab.index FROM tab) LOOP
-            klas = (SELECT u.klasa FROM uczniowie u WHERE u.index = tab.index);
-            klasn = (SELECT kl.nazwa_klasy FROM klasy kl WHERE kl.klasa = klas);
-            klas = (SELECT kl.nr_klasy FROM klasy kl WHERE kl.klasa=klas);
-            IF (SELECT klasa FROM klasy WHERE nazwa_klasy=klasn AND nr_klasy=klas-1) IS NOT NULL THEN
-                UPDATE uczniowie SET klasa = (SELECT klasa FROM klasy WHERE nazwa_klasy=klasn AND nr_klasy=klas-1) WHERE index = i;
-            ELSE UPDATE uczniowie SET klasa =
-                (SELECT k.klasa FROM klasy k LEFT JOIN uczniowie u on k.klasa = u.klasa WHERE k.nr_klasy=
-                (SELECT nr_klasy FROM klasy kl WHERE kl.klasa = klas)-1 GROUP BY k.klasa ORDER BY COUNT(*) LIMIT 1)
-                WHERE index=i;
-            END IF;
-        end loop;
         FOR i in (SELECT index FROM uczniowie WHERE klasa in (SELECT klasa FROM klasy WHERE nr_klasy=8)) LOOP
-            IF i not IN (SELECT distinct tab.index FROM tab) THEN
                 UPDATE uczniowie SET klasa=null, absolwent='T' WHERE Uczniowie.index=i;
-            end if;
             end loop;
         FOR a in (SELECT * FROM klasy ORDER BY klasa DESC) LOOP
             if (a.nr_klasy=8) THEN DELETE FROM klasy WHERE klasa = a.klasa;
             ELSE UPDATE klasy SET nr_klasy = a.nr_klasy+1 WHERE klasa = a.klasa;
             END IF;
             end loop;
-        DROP TABLE tab;
+        RETURN QUERY SELECT * FROM tab;
     end;
     $$
 language plpgsql;
@@ -735,7 +760,7 @@ INSERT INTO zastepstwa (lekcja, nauczyciel, data) VALUES (4, 2, '05.06.2020');
 INSERT INTO lata_szkolne (id, nazwa) VALUES (0, '2018/2019');
 INSERT INTO lata_szkolne (id, nazwa) VALUES (1, '2019/2020');
 
-INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,1,3,4,1);
+INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,1,3,1,1);
 INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,2,2,4,1);
 INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (401,4,4,4,1);
 INSERT INTO oceny_okresowe (index, przedmiot, ocena_srodroczna, ocena_koncoworoczna, rok) VALUES (402,1,3,4,1);
