@@ -524,11 +524,11 @@ language plpgsql;
 ------------------------
 
 create or replace function plan_lekcji_nauczyciela(idn int)
-    returns TABLE(przedmiot varchar,czas text ,dzien DZIEN,sala INTEGER,klasa INTEGER,id_lekcji integer) as
+    returns TABLE(przedmiot varchar,czas text ,dzien DZIEN,sala INTEGER,klasa CHAR(2),id_lekcji integer) as
 $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
-    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, l.klasa, l.id FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
+    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, klasa(l.klasa), l.id FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
         l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn) ORDER BY l.dzien, l.czas;
 end;
 $$
