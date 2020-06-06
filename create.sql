@@ -614,7 +614,7 @@ language plpgsql;
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION niezdajacy_uczniowie()
+CREATE OR REPLACE FUNCTION niezdajacy_uczniowie(rokid int)
 RETURNS TABLE (index_ucznia int) AS
     $$
     DECLARE i int;
@@ -623,7 +623,7 @@ RETURNS TABLE (index_ucznia int) AS
         FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
-        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1) LOOP
+        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1 AND rok=rokid) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
         RETURN QUERY SELECT * FROM tab;
@@ -645,7 +645,7 @@ RETURNS TABLE (index_ucznia int) AS
         FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
-        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1) LOOP
+        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1 AND rok=rokid) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
         DELETE FROM oceny WHERE TRUE;
@@ -817,3 +817,5 @@ GRANT UPDATE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
+
+SELECT * FROM swiadectwa_srednie(1) WHERE srednia>=4.75;
