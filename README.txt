@@ -11,7 +11,8 @@ obecnościach uczniów na lekcjach  (tabela nieobecności),
 ocenach uczniów z konkretnych przedmiotów (Tabela oceny),
 formach sprawdzania wiedzy np. sprawdzianach, kartkówkach (tabela terminarz),
 zastępstwach (tabla zastepstwa),
-ocenach okresowych-śródrocznych i koncoworocznych (tabela oceny_okresowe).
+ocenach okresowych-śródrocznych i koncoworocznych (tabela oceny_okresowe),
+kolejnych latach szkolnych (tabela lata_szkolne).
 
 
 Zachodzą następujące zależności między tablami: 
@@ -34,6 +35,7 @@ Tabela oceny_okresowe jest w relacji OW:NJ z Uczniowie na zasadzie każda ocena 
 Tabela oceny_okresowe jest w relacji OW:NJ z Przedmioty na zasadzie każda ocena musi dotyczyć konkretnego przedmiotu, jednak nie z każdego przedmiotu musi być wystawiona ocena. 
 Tabela nauczyciele_prowadzacy jest w relacji OW:NJ z Przedmioty na zasadzie każda krotka w np musi dotyczyć konkretnego przedmiotu, jednak nie każdy przedmiot musi mieć prowadzącego go nauczyciela.
 Tabela nauczyciele_prowadzacy jest w relacji OW:NJ z Pracownicy na zasadzie każda krotka w np musi dotyczyć konkretnego nauczyciela, jednak nie każdy nauczyciel musi prowadzić jakieś zajęcia.
+Tabela oceny_okresowe jest w relacji OW:NJ z lata_szkolne na zasadzie każda ocena okresowa dotyczy dokładnie jednego roku szkolnego, jednak nie w każdym roku musiała jakś zostać wystawiona.
 
 Dodatkowo zawarte są:
 funkcja przedstawiająca spis zajęć dla podanego ucznia(mojPlanLekcji),funckja przedstawiająca dla zadanej klasy spis form sprawdzania wiedzy z terminarza(terminarzKlasy) oraz widok liczący dla każdego ucznia średnie w szystkich przedmiotów na które uczęszcza np. w celu wystawienia oceny okresowej(srednie_ocen).

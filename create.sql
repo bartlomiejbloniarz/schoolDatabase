@@ -537,7 +537,7 @@ language plpgsql;
 -----------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION terminarz_klasy(kl integer)
-RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ varchar, komentarz varchar) AS
+RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ sprawdziany, komentarz varchar) AS
     $$
     BEGIN
         RETURN QUERY SELECT t.lekcja,
