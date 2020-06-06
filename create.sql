@@ -455,6 +455,26 @@ CREATE TRIGGER dodaj_ocene_okresowa BEFORE INSERT OR UPDATE ON oceny_okresowe FO
 
 --FUNCTIONS
 
+CREATE OR REPLACE FUNCTION przedmiot (p integer) RETURNS varchar AS
+    $$
+    begin
+        RETURN (SELECT nazwa FROM przedmioty WHERE id=p);
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
+CREATE OR REPLACE FUNCTION przedmiot (p varchar) RETURNS int AS
+    $$
+    begin
+        RETURN (SELECT id FROM przedmioty WHERE nazwa=p);
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
 CREATE OR REPLACE FUNCTION klasa (kl integer) RETURNS char(2) AS
     $$
     begin
@@ -528,8 +548,8 @@ create or replace function plan_lekcji_nauczyciela(idn int)
 $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
-    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, klasa(l.klasa), l.id FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
-        l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn) ORDER BY l.dzien, l.czas;
+    return QUERY SELECT przedmiot(np.id_przedmiot), to_char(l.czas, 'HH:MI'), l.dzien, l.sala, klasa(l.klasa), l.id FROM lekcje l JOIN nauczyciele_prowadzacy np ON l.przedmiot=np.id WHERE
+        l.przedmiot IN (SELECT id FROM nauczyciele_prowadzacy WHERE nauczyciel=idn) ORDER BY l.dzien, l.czas;
 end;
 $$
 language plpgsql;
@@ -819,3 +839,8 @@ GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
 
 SELECT * FROM swiadectwa_srednie(1) WHERE srednia>=4.75;
+
+SELECT przedmiot(id_przedmiot) FROM nauczyciele_prowadzacy np JOIN Lekcje ON np.id = Lekcje.przedmiot WHERE nauczyciel=1 AND klasa=1;
+
+SELECT * FROM nauczyciele_prowadzacy;
+SELECT * FROM lekcje WHERE przedmiot in (1,2);
