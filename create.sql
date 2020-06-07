@@ -1,4 +1,5 @@
 --GROUPS
+
 CREATE ROLE Administracja LOGIN INHERIT;
 CREATE ROLE Nauczyciele LOGIN INHERIT;
 CREATE ROLE Uczniowie LOGIN INHERIT;
@@ -20,11 +21,17 @@ CREATE TYPE SPRAWDZIANY AS ENUM ('sprawdzian', 'kartkowka', 'odpowiedz');
 
 CREATE TYPE OBECNOSC AS ENUM ('N', 'U', 'W', 'G');
 
+--SEQUENCES
+
+CREATE SEQUENCE aktualny_rok_szkolny;
+GRANT ALL ON SEQUENCE aktualny_rok_szkolny TO nauczyciele;
+SELECT setval('aktualny_rok_szkolny', 1);
+
 --TABLES
 
 CREATE TABLE lata_szkolne(
     id integer PRIMARY KEY,
-    nazwa char(9) NOT NULL
+    nazwa char(9) NOT NULL UNIQUE
 );
 
 CREATE TABLE Pracownicy(
@@ -119,6 +126,20 @@ CREATE TABLE oceny_okresowe(
     PRIMARY KEY (index,przedmiot,rok)
 );
 --TRIGGERS
+
+CREATE OR REPLACE FUNCTION rok_szkolny()
+RETURNS TRIGGER AS
+    $$
+    begin
+        IF substring(NEW.nazwa, 1, 4)::integer+1<>substring(NEW.nazwa, 6, 4)::integer THEN RAISE EXCEPTION 'Niepoprawna nazwa roku'; END IF;
+        IF NOT(NEW.nazwa ~ '^[0-9]{4}\/[0-9]{4}$') THEN RAISE EXCEPTION 'Niepoprawna nazwa roku';END IF;
+        IF NEW.id IS NULL THEN NEW.id = COALESCE((SELECT max(id) FROM lata_szkolne), 0)+1; END IF;
+        RETURN NEW;
+    end;
+    $$
+language plpgsql;
+
+CREATE TRIGGER rok_szkolny BEFORE INSERT OR UPDATE ON lata_szkolne FOR EACH ROW EXECUTE PROCEDURE rok_szkolny();
 
 create or replace function ocena_z_lekcji()
     returns TRIGGER AS
@@ -426,6 +447,8 @@ CREATE OR REPLACE FUNCTION dodaj_ocene_okresowa()
 RETURNS TRIGGER AS
 $$
 BEGIN
+    IF NEW.rok IS NULL THEN NEW.rok = pg_sequence_last_value('aktualny_rok_szkolny'); END IF;
+
     IF NEW.przedmiot not in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa in (SELECT klasa FROM uczniowie WHERE index=NEW.index))
     THEN RAISE EXCEPTION 'Uczeń nie ma takiej lekcji'; END IF;
 
@@ -454,6 +477,26 @@ LANGUAGE plpgsql;
 CREATE TRIGGER dodaj_ocene_okresowa BEFORE INSERT OR UPDATE ON oceny_okresowe FOR EACH ROW EXECUTE PROCEDURE dodaj_ocene_okresowa();
 
 --FUNCTIONS
+
+CREATE OR REPLACE FUNCTION przedmiot (p integer) RETURNS varchar AS
+    $$
+    begin
+        RETURN (SELECT nazwa FROM przedmioty WHERE id=p);
+    end;
+    $$
+language plpgsql;
+
+------------------------
+
+CREATE OR REPLACE FUNCTION przedmiot (p varchar) RETURNS int AS
+    $$
+    begin
+        RETURN (SELECT id FROM przedmioty WHERE nazwa=p);
+    end;
+    $$
+language plpgsql;
+
+------------------------
 
 CREATE OR REPLACE FUNCTION klasa (kl integer) RETURNS char(2) AS
     $$
@@ -528,8 +571,8 @@ create or replace function plan_lekcji_nauczyciela(idn int)
 $$
 begin
     IF idn NOT IN (SELECT id FROM pracownicy) THEN RAISE EXCEPTION 'Nie ma takiego nauczyciela';END IF;
-    return QUERY SELECT nazwa, to_char(l.czas, 'HH:MI'), l.dzien, l.sala, klasa(l.klasa), l.id FROM lekcje l JOIN przedmioty p ON l.przedmiot=p.id WHERE
-        l.przedmiot IN (SELECT id_przedmiot FROM nauczyciele_prowadzacy WHERE nauczyciel=idn) ORDER BY l.dzien, l.czas;
+    return QUERY SELECT przedmiot(np.id_przedmiot), to_char(l.czas, 'HH:MI'), l.dzien, l.sala, klasa(l.klasa), l.id FROM lekcje l JOIN nauczyciele_prowadzacy np ON l.przedmiot=np.id WHERE
+        l.przedmiot IN (SELECT id FROM nauczyciele_prowadzacy WHERE nauczyciel=idn) ORDER BY l.dzien, l.czas;
 end;
 $$
 language plpgsql;
@@ -564,21 +607,21 @@ language plpgsql;
 -----------------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION koniec_roku_braki(rokid int)
-RETURNS TABLE (index_ucznia int, przedmiot_brak int) AS
+RETURNS TABLE (index_ucznia int, przedmiot_brak varchar) AS
     $$
     declare
         i int;
         j int;
     begin
-        CREATE TEMP TABLE tab(ind int, p int) ON COMMIT DROP;
+        CREATE TEMP TABLE tab(ind int, p varchar) ON COMMIT DROP;
         FOR i in (SELECT u.index FROM uczniowie u WHERE absolwent='N') LOOP
             FOR j in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa = (SELECT klasa FROM Uczniowie WHERE index = i)) LOOP
                 if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=rokid) IS NULL) THEN
-                INSERT INTO tab VALUES (i,j);
+                INSERT INTO tab VALUES (i,przedmiot(j));
                 END IF;
                 end loop;
             end loop;
-        RETURN QUERY SELECT * FROM tab GROUP BY 1,2;
+        RETURN QUERY SELECT * FROM tab GROUP BY 1,2 ORDER BY 1,2;
     end;
     $$
 language plpgsql;
@@ -661,6 +704,10 @@ RETURNS TABLE (index_ucznia int) AS
             ELSE UPDATE klasy SET nr_klasy = a.nr_klasy+1 WHERE klasa = a.klasa;
             END IF;
             end loop;
+        IF (SELECT id FROM lata_szkolne WHERE nazwa = CONCAT(substring(rok(int4(pg_sequence_last_value('aktualny_rok_szkolny'))), 1, 4)::int+1,'/',substring(rok(int4(pg_sequence_last_value('aktualny_rok_szkolny'))), 1, 4)::int+2)) IS NULL THEN
+        INSERT INTO lata_szkolne (nazwa) VALUES (CONCAT(substring(rok(int4(pg_sequence_last_value('aktualny_rok_szkolny'))), 1, 4)::int+1,'/',substring(rok(int4(pg_sequence_last_value('aktualny_rok_szkolny'))), 1, 4)::int+2));
+        END IF;
+        PERFORM setval('aktualny_rok_szkolny', rok(CONCAT(substring(rok(int4(pg_sequence_last_value('aktualny_rok_szkolny'))), 1, 4)::int+1,'/',substring(rok(int4(pg_sequence_last_value('aktualny_rok_szkolny'))), 1, 4)::int+2)));
         RETURN QUERY SELECT * FROM tab;
     end;
     $$
@@ -818,4 +865,5 @@ GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
 
-SELECT * FROM swiadectwa_srednie(1) WHERE srednia>=4.75;
+
+
