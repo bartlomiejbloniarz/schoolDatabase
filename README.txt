@@ -58,6 +58,8 @@ oceny okresowe przy dodawaniu są przechwytywane, na wypadek, gdyby krotka daneg
 Dla dodawanych uczniowiów i nauczycieli automatycznie zostaje utworzone konto pozwalające na dostęp do pewnych, przeznaczonych dla nich danych(oczywiście po upewnieniu się, że samo dodanie do bazy nie powoduje błędu).
 Usuwając osobę z bazy danych konto to zostaje wycofane, w przypadku ucznia wraz z jego ocenami i innymi powiązaniami.
 
+Typy nieobecnosci tłumaczą się jako: N-nieusprawiedliwiony, U-usprawiedzliwiony, W-wycieczka, G-glejt.
+
 --------------------------------------------------------------------------------------------
 
 APLIKACJA:
