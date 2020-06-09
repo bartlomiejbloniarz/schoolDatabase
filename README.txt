@@ -55,7 +55,8 @@ dodane formy sprawdzania wiedzy, zastępstwa, nieobecności,  które to posiadaj
 oceny okresowe przy dodawaniu są przechwytywane, na wypadek, gdyby krotka danego ucznia i przedmiotu już istniała. Wówczas jest ona aktualizowana, by zachować porządek danych. 
 
 
-Dla dodawanych uczniowiów i nauczycieli automatycznie zostaje utworzone konto pozwalające na dostęp do pewnych, przeznaczonych dla nich danych(oczywiście po upewnieniu się, że samo dodanie do bazy nie powoduje błędu). Usiwając osobę z bazy danych konto to zostaje wycofane. 
+Dla dodawanych uczniowiów i nauczycieli automatycznie zostaje utworzone konto pozwalające na dostęp do pewnych, przeznaczonych dla nich danych(oczywiście po upewnieniu się, że samo dodanie do bazy nie powoduje błędu).
+Usuwając osobę z bazy danych konto to zostaje wycofane, w przypadku ucznia wraz z jego ocenami i innymi powiązaniami.
 
 --------------------------------------------------------------------------------------------
 
@@ -78,6 +79,8 @@ Niedostępne mozliwości są albo zupełnie niemożliwe do wykonania przez aplik
 zamiast jej wykonania.
 Nauczyciel może zobaczyć cały terminarz klas które uczyprzykładowo w celu ustalenia niekolidującego terminu) oraz wszystkie oceny wychowanków,
 jednak zmian może dokonać tylko przez tabele służące do wyświetlania dostępnych do zmiany dla niego informacji.
+Istnieje możliwość seryjnego dodawania ocen i ocen okresowych przez nauczyciela, poprzez wybór opcji w menu kontekstowym klasy.
+Moze on również dodać seryjnie nieobecności, poprzez wybranie odpowiedzniej opcji w menu kontekstowym lekcji z jego planu lekcji.
 
 
 Przykładowe dane: 

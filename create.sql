@@ -286,6 +286,9 @@ RETURNS TRIGGER AS
     BEGIN
     nazwa=CONCAT('u',cast(OLD.index AS varchar));
     EXECUTE('DROP USER ' || quote_ident(nazwa) || ';') ;
+    DELETE FROM Oceny WHERE Oceny.index=OLD.index;
+    DELETE FROM oceny_okresowe WHERE oceny_okresowe.index=OLD.index;
+    DELETE FROM Nieobecnosci WHERE Nieobecnosci.index=OLD.index;
     RETURN OLD;
     end;
     $$
