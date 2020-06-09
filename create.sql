@@ -45,7 +45,7 @@ CREATE TABLE Klasy(
     nr_klasy NUMERIC(1) NOT NULL,
     nazwa_klasy CHAR(1) NOT NULL,
     klasa integer NOT NULL,
-    wychowawca INTEGER NOT NULL REFERENCES Pracownicy(id),
+    wychowawca INTEGER NOT NULL REFERENCES Pracownicy(id) UNIQUE,
     PRIMARY KEY (klasa),
     UNIQUE (nr_klasy, nazwa_klasy),
     check(nr_klasy>0 AND nr_klasy<9)
