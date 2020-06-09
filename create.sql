@@ -581,12 +581,12 @@ $$
 language plpgsql;
 
 -----------------------------------------------------------------------------------------
-
+--drop function terminarz_klasy(kl integer)
 CREATE OR REPLACE FUNCTION terminarz_klasy(kl integer)
-RETURNS TABLE (nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ sprawdziany, komentarz varchar) AS
+RETURNS TABLE (klasa_ char(2),nr_lekcji INTEGER,lekcja VARCHAR, dzien DATE, typ sprawdziany, komentarz varchar) AS
     $$
     BEGIN
-        RETURN QUERY SELECT t.lekcja,
+        RETURN QUERY SELECT klasa(l.klasa) ,t.lekcja,
         (SELECT nazwa FROM przedmioty JOIN nauczyciele_prowadzacy np ON Przedmioty.id = np.id_przedmiot
             WHERE np.id=l.przedmiot)
         ,t.dzien,t.typ,t.komentarz FROM terminarz t LEFT JOIN lekcje l ON l.id=t.lekcja
@@ -870,3 +870,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
 
 
 
+UPDATE Terminarz SET typ='kartkowka'
+ WHERE lekcja=4 AND dzien='2020-06-12';
+
+SELECT * FROM terminarz;
