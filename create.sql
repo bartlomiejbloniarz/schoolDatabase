@@ -221,6 +221,7 @@ create or replace function dodaj_lekcje()
     begin
         IF TG_OP='INSERT' THEN NEW.id=(SELECT COALESCE(MAX(id),0) FROM Lekcje)+1;END IF;
         IF TG_OP='UPDATE' THEN NEW.id=OLD.id;END IF;
+        IF TG_OP='UPDATE' AND (NEW.dzien<>OLD.dzien OR NEW.czas<>OLD.czas) THEN DELETE FROM zastepstwa WHERE lekcja=OLD.id; END IF;
         for record in SELECT* FROM Lekcje loop
             if(record.klasa=NEW.klasa AND record.czas=NEW.czas AND record.dzien=NEW.dzien)THEN
                 IF TG_OP='UPDATE' AND record IS NOT DISTINCT FROM OLD THEN CONTINUE;END IF;
@@ -234,6 +235,20 @@ create or replace function dodaj_lekcje()
 LANGUAGE plpgsql;
 
 CREATE TRIGGER dodaj_lekcje BEFORE INSERT OR UPDATE ON Lekcje FOR EACH ROW EXECUTE PROCEDURE dodaj_lekcje();
+
+---------------------------------------------------------------------------------------
+
+create or replace function usun_lekcje()
+    returns TRIGGER AS
+    $$
+    begin
+        DELETE FROM zastepstwa WHERE lekcja=OLD.id;
+        RETURN OLD;
+    end;
+    $$
+LANGUAGE plpgsql;
+
+CREATE TRIGGER usun_lekcje BEFORE DELETE ON Lekcje FOR EACH ROW EXECUTE PROCEDURE usun_lekcje();
 
 ---------------------------------------------------------------------------------------
 
