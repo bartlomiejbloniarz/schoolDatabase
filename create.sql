@@ -602,14 +602,14 @@ RETURNS TABLE (index int, srednia numeric(3,2)) AS
     $$
     BEGIN
         RETURN QUERY
-        SELECT u.index, ROUND(AVG(ocena_koncoworoczna),2) FROM uczniowie u JOIN oceny_okresowe oo on u.index = oo.index WHERE u.absolwent='N' AND oo.rok=rokid GROUP BY u.index;
+        SELECT u.index, ROUND(AVG(ocena_koncoworoczna),2) FROM uczniowie u JOIN oceny_okresowe oo on u.index = oo.index WHERE oo.rok=rokid GROUP BY u.index;
     end;
     $$
 language plpgsql;
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION koniec_roku_braki(rokid int)
+CREATE OR REPLACE FUNCTION koniec_roku_braki()
 RETURNS TABLE (index_ucznia int, przedmiot_brak varchar) AS
     $$
     declare
@@ -619,7 +619,7 @@ RETURNS TABLE (index_ucznia int, przedmiot_brak varchar) AS
         CREATE TEMP TABLE tab(ind int, p varchar) ON COMMIT DROP;
         FOR i in (SELECT u.index FROM uczniowie u WHERE absolwent='N') LOOP
             FOR j in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa = (SELECT klasa FROM Uczniowie WHERE index = i)) LOOP
-                if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=rokid) IS NULL) THEN
+                if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=int4(pg_sequence_last_value('aktualny_rok_szkolny'))) IS NULL) THEN
                 INSERT INTO tab VALUES (i,przedmiot(j));
                 END IF;
                 end loop;
@@ -631,7 +631,7 @@ language plpgsql;
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION koniec_roku(rokid int)
+CREATE OR REPLACE FUNCTION koniec_roku()
 RETURNS VOID AS
     $$
     declare
@@ -640,7 +640,7 @@ RETURNS VOID AS
     begin
         FOR i in (SELECT index FROM uczniowie WHERE absolwent='N') LOOP
             FOR j in (SELECT id_przedmiot FROM nauczyciele_prowadzacy np JOIN Lekcje L on np.id = L.przedmiot WHERE L.klasa = (SELECT klasa FROM Uczniowie WHERE index = i)) LOOP
-                if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=rokid) IS NULL) THEN RAISE EXCEPTION 'Brak części ocen końcowych'; END IF;
+                if ((SELECT ocena_koncoworoczna FROM oceny_okresowe WHERE przedmiot=j AND index=i AND rok=int4(pg_sequence_last_value('aktualny_rok_szkolny'))) IS NULL) THEN RAISE EXCEPTION 'Brak części ocen końcowych'; END IF;
                 end loop;
             end loop;
     end;
@@ -660,7 +660,7 @@ language plpgsql;
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION niezdajacy_uczniowie(rokid int)
+CREATE OR REPLACE FUNCTION niezdajacy_uczniowie()
 RETURNS TABLE (index_ucznia int) AS
     $$
     DECLARE i int;
@@ -669,7 +669,7 @@ RETURNS TABLE (index_ucznia int) AS
         FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
-        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1 AND rok=rokid) LOOP
+        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1 AND rok=int4(pg_sequence_last_value('aktualny_rok_szkolny'))) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
         RETURN QUERY SELECT * FROM tab;
@@ -679,19 +679,19 @@ language plpgsql;
 
 -----------------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION koniec_roku_czyszczenie(rokid int)
+CREATE OR REPLACE FUNCTION koniec_roku_czyszczenie()
 RETURNS TABLE (index_ucznia int) AS
     $$
     DECLARE
         i int;
         a record;
     begin
-        PERFORM koniec_roku(rokid);
+        PERFORM koniec_roku();
         CREATE TEMP TABLE tab (index int) ON COMMIT DROP;
         FOR i in (SELECT index FROM nieobecnosci WHERE typ='N' GROUP BY index HAVING COUNT(*)>10) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
-        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1 AND rok=rokid) LOOP
+        FOR i in (SELECT distinct index FROM oceny_okresowe WHERE ocena_koncoworoczna=1 AND rok=int4(pg_sequence_last_value('aktualny_rok_szkolny'))) LOOP
                 INSERT INTO tab VALUES (i);
             end loop;
         DELETE FROM oceny WHERE TRUE;
@@ -867,10 +867,3 @@ GRANT UPDATE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 GRANT DELETE ON ALL TABLES IN SCHEMA public TO Nauczyciele;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO Uczniowie;
-
-
-
-UPDATE Terminarz SET typ='kartkowka'
- WHERE lekcja=4 AND dzien='2020-06-12';
-
-SELECT * FROM terminarz;
