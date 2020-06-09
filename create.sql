@@ -5,7 +5,7 @@ CREATE ROLE Nauczyciele LOGIN INHERIT;
 CREATE ROLE Uczniowie LOGIN INHERIT;
 
 
-CREATE USER sekretariat PASSWORD 'sekretariat';
+CREATE USER sekretariat PASSWORD 'sekretariatstrongPasswordAddition123';
 ALTER USER sekretariat WITH SUPERUSER;
 GRANT Administracja TO sekretariat;
 
@@ -190,7 +190,7 @@ create or replace function dodaj_dziecko()
                 THEN RAISE EXCEPTION 'Klasa jest pełna';END IF;
          end loop;
         nazwa=CONCAT('u',cast(NEW.index AS varchar));
-        IF TG_OP='INSERT' THEN EXECUTE('CREATE USER ' || quote_ident(nazwa) || ' PASSWORD ''1234'';');END IF;
+        IF TG_OP='INSERT' THEN EXECUTE('CREATE USER ' || quote_ident(nazwa) || ' PASSWORD ''1234strongPasswordAddition123'';');END IF;
         IF TG_OP='INSERT' THEN EXECUTE('GRANT Uczniowie TO ' || quote_ident(nazwa) || ';') ;END IF;
         return NEW;
     end;
@@ -264,7 +264,7 @@ RETURNS TRIGGER AS
         NEW.id=(SELECT COALESCE(MAX(id),0) FROM pracownicy)+1;
 
         nazwa=CONCAT('n',cast(NEW.id AS varchar));
-        EXECUTE('CREATE USER ' || quote_ident(nazwa) || ' PASSWORD ''1234'';') ;--to jest rigger tylko na insert anw
+        EXECUTE('CREATE USER ' || quote_ident(nazwa) || ' PASSWORD ''1234strongPasswordAddition123'';') ;--to jest rigger tylko na insert anw
         EXECUTE('GRANT Nauczyciele TO ' || quote_ident(nazwa) || ';') ;
         RETURN NEW;
     end;
