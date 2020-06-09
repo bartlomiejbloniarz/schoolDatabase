@@ -65,22 +65,25 @@ create.sql należy uruchomić w bazie danych o nazwie "school" i schemacie o naz
 
 Aplikacja celowo nie umożliwia modyfikowania tabeli Sale-jest to coś na tyle niezmiennego, że dostęp do tego wydaje nam się logiczny jedynie z poziomu bazy danych.
 Nieobecności dostępne są poprzez menu kontekstowe konkretnego ucznia.
-Każda tabela posiada własny zestaw akcji jakie można wykonać na jej krotkach. Podstawowwymi akcjami są usówanie, dodawanie oraz zmienianie
+Każda tabela posiada własny zestaw akcji jakie można wykonać na jej krotkach. Podstawowwymi akcjami są usuwanie, dodawanie oraz zmienianie
 (choć nie wszystkie table posiadają te możliwości). W szczególności srednie_ocen nie posiadają tej możliwości jako automatycznie wyliczana tabela(view).
 Pola które mogą mieć wartość null(np. kometarze) mozna na takie zmienić(jeśli były wypełnione) wpisująć "BRAK" w pole wypełniania(poza nazwą klasy ucznia i polem absolwent,
 które są w odpowiedni sposób wypełniane automatycznie gdy któreś zostanie zmienione).
 
 Nauczyciele mają ograniczone prawa dostępu(stosujemy role, którym przydzialene są uprawnienia w bazie danych),
-każdy ma dostęp do uczniów których uczy(i ich ocen okresowych i ich średnich ocen),
-swojego planu lekcji(choć może zobaczyć też plan lekcji klas), swojego terminarza, swoich zastępstw(tych, które on prowadzi),
-wprowadzonych przez siebie ocen, klas które uczy, przedmiotów które prowadzi oraz dostęp do panelu wychowawcy pozwalającego na
+każdy ma dostęp do uczniów których uczy(również ich ocen okresowych ich średnich ocen),
+swojego planu lekcji(choć może zobaczyć też cały plan lekcji klas), swojego terminarza, swoich zastępstw(tych, które on prowadzi),
+wprowadzonych przez siebie ocen, klas które uczy, przedmiotów które prowadzi oraz posiada dostęp do panelu wychowawcy pozwalającego na
 zarządzanie nieobecnościami uczniów których jest wychowawcą.
 Niedostępne mozliwości są albo zupełnie niemożliwe do wykonania przez aplikacje, albo powodują pojawienie się wiadomości o niepoprawnej akcji
 zamiast jej wykonania.
-Nauczyciel może zobaczyć cały terminarz klas które uczyprzykładowo w celu ustalenia niekolidującego terminu) oraz wszystkie oceny wychowanków,
+Nauczyciel może zobaczyć cały terminarz klas które uczy(przykładowo w celu ustalenia niekolidującego terminu) oraz wszystkie oceny wychowanków,
 jednak zmian może dokonać tylko przez tabele służące do wyświetlania dostępnych do zmiany dla niego informacji.
-Istnieje możliwość seryjnego dodawania ocen i ocen okresowych przez nauczyciela, poprzez wybór opcji w menu kontekstowym klasy.
+Istnieje możliwość seryjnego dodawania ocen i ocen okresowych(wraz z wyświetlaniem średnich) przez nauczyciela, poprzez wybór opcji w menu kontekstowym klasy.
 Moze on również dodać seryjnie nieobecności, poprzez wybranie odpowiedzniej opcji w menu kontekstowym lekcji z jego planu lekcji.
+
+Lekcje oraz pracowników podaje się przez ich id, przedmioty natomiast przez nazwę.
+Część pól wypełnia się poprzez menu kontekstowe, dla wygody użytkownika oraz minimalizacji pomyłek.
 
 
 Przykładowe dane: 
@@ -117,7 +120,9 @@ Przykładowe dane
 Clear.sql
 
 Kwestia aplikacji:
-szkielet projektu, niektóre funkcjonalności. Możliwość logowania się przez różne typy użytkowników w inny sposób. Część widoków.
+szkielet projektu, niektóre funkcjonalności, jak seryjne dodawanie ocen oraz ocen okresowych.
+Możliwość logowania się przez różne typy użytkowników w inny sposób. Część widoków.
+Część okeinek pozwalających na dodawanie opraz aktualizację danych.
 ------------------------------------------------------------------------------------------------------
 Inka Sokołowska:
 Stworzone tabele:
@@ -136,4 +141,9 @@ srednie_ocen
 Readme
 
 Kwestia aplikacji:
-funkcjonalności jak dodawanie, usuwanie, zmienianie, zmiana hasla. Część widoków.
+funkcjonalności jak dodawanie, usuwanie, zmienianie, zmiana hasla, seryjne dodawanie nieobecnosci, wyswietlanie srednich. Część widoków.
+Część okeinek pozwalających na dodawanie opraz aktualizację danych.
+Zabezpieczenia aplikacji.
+--------------------------------------------------------------------------------------------------------
+Całość projektu była wspólnie uzgadniana, wymienione powyżej aspekty były konsultowane oraz przynajmniej częściowo współtworzone.
+
