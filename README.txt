@@ -99,8 +99,8 @@ Przykładowy nauczyciel: 1 (ten, którego login został podany powyżej)
 Przykładowa klasa: 4E  (należy do niej 401 i uczy ją między innymi 1 i jest jej wychowawcą)
 
 
-Nauczycieli, przedmioty i lekcje wprowadzane są poprzez ich id, uczniowie poprzez index, natomiast klasa i rok poprzez nazwę
-(odpowiednio np. 4E, 2019/2020).
+Nauczyciele i lekcje wprowadzane są poprzez ich id, uczniowie poprzez index, natomiast klasa, przedmiot i rok poprzez nazwę
+(odpowiednio np. 4E, Matematyka, 2019/2020).
 
 
 
